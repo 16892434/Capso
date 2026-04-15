@@ -12,8 +12,8 @@ public enum CursorEventType: String, Codable, Sendable {
 /// A single cursor event captured during a recording session.
 /// Coordinates are normalized to [0, 1] relative to the recording area.
 public struct CursorEvent: Codable, Sendable {
-    /// Time in seconds since recording started (from ProcessInfo.systemUptime).
-    public let timestamp: Double
+    /// Time in seconds since recording started, relative to `start()` being called.
+    public let timestamp: TimeInterval
     /// Normalized horizontal position (0 = left edge, 1 = right edge).
     public let x: Double
     /// Normalized vertical position (0 = top edge, 1 = bottom edge).
@@ -21,7 +21,7 @@ public struct CursorEvent: Codable, Sendable {
     /// The type of cursor interaction.
     public let type: CursorEventType
 
-    public init(timestamp: Double, x: Double, y: Double, type: CursorEventType) {
+    public init(timestamp: TimeInterval, x: Double, y: Double, type: CursorEventType) {
         self.timestamp = timestamp
         self.x = x
         self.y = y

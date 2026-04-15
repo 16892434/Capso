@@ -23,7 +23,15 @@ public final class CursorTelemetry: @unchecked Sendable {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var runLoop: CFRunLoop?
-    private var thread: Thread?
+    private var tapThread: Thread?
+
+    /// Opaque pointer produced by `Unmanaged.passRetained(self)` in `start()`.
+    /// Stored here so both `stop()` and `deinit` can release it exactly once.
+    private var selfRetainPointer: UnsafeMutableRawPointer?
+
+    /// System uptime at the moment `start()` was called; used to produce
+    /// recording-relative timestamps.
+    private var startTime: TimeInterval = 0
 
     // MARK: - Init
 
@@ -60,7 +68,7 @@ public final class CursorTelemetry: @unchecked Sendable {
 
     /// Appends an event directly. Use this for testing or synthetic event injection.
     /// The coordinates are normalized and clamped relative to the recording area.
-    public func addEvent(timestamp: Double, globalPoint: CGPoint, type: CursorEventType) {
+    public func addEvent(timestamp: TimeInterval, globalPoint: CGPoint, type: CursorEventType) {
         let (nx, ny) = normalize(globalPoint: globalPoint)
         let event = CursorEvent(timestamp: timestamp, x: nx, y: ny, type: type)
         lock.withLock { events.append(event) }
@@ -73,8 +81,15 @@ public final class CursorTelemetry: @unchecked Sendable {
     /// Captures: `.mouseMoved`, `.leftMouseDragged`, `.rightMouseDragged`,
     /// `.leftMouseDown`, `.rightMouseDown`.
     /// The tap runs in listen-only mode (`.listenOnly`) at `.cghidEventTap`.
+    ///
+    /// A `DispatchSemaphore` ensures the background run-loop is up and `runLoop`
+    /// is stored before this method returns, eliminating the race window between
+    /// `start()` and `stop()`.
     public func start() {
         guard eventTap == nil else { return }
+
+        // Record the reference time for relative timestamps.
+        startTime = ProcessInfo.processInfo.systemUptime
 
         let mask: CGEventMask =
             (1 << CGEventType.mouseMoved.rawValue)
@@ -83,8 +98,10 @@ public final class CursorTelemetry: @unchecked Sendable {
             | (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
 
-        // Retain self so the C callback can reach it.
+        // Retain self so the C callback can reach it. Store the opaque pointer
+        // so we can release it exactly once from stop() or deinit.
         let userInfo = Unmanaged.passRetained(self).toOpaque()
+        selfRetainPointer = userInfo
 
         guard let tap = CGEvent.tapCreate(
             tap: .cghidEventTap,
@@ -101,6 +118,7 @@ public final class CursorTelemetry: @unchecked Sendable {
         ) else {
             // tapCreate failed; release the retained self to avoid leak.
             Unmanaged<CursorTelemetry>.fromOpaque(userInfo).release()
+            selfRetainPointer = nil
             return
         }
 
@@ -109,35 +127,48 @@ public final class CursorTelemetry: @unchecked Sendable {
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         self.runLoopSource = source
 
+        // Semaphore ensures the background thread has stored `runLoop` in the
+        // lock-protected property before `start()` returns, so `stop()` cannot
+        // observe a nil runLoop after `start()` has been called.
+        let readySemaphore = DispatchSemaphore(value: 0)
+
         let bgThread = Thread { [weak self] in
             guard let source, let self else { return }
             let rl = CFRunLoopGetCurrent()
-            self.runLoop = rl
+            self.lock.withLock { self.runLoop = rl }
             CFRunLoopAddSource(rl, source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
+            readySemaphore.signal()
             CFRunLoopRun()
         }
         bgThread.name = "com.capso.cursortelemetry"
+        bgThread.qualityOfService = .userInteractive
         bgThread.start()
-        self.thread = bgThread
+        tapThread = bgThread
+
+        // Block until the run loop is running and `runLoop` is set.
+        readySemaphore.wait()
     }
 
-    /// Stops the event tap and frees the retained self reference.
+    /// Stops the event tap and releases the retained self reference taken in `start()`.
     public func stop() {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let rl = runLoop {
-            CFRunLoopStop(rl)
+        // Access runLoop under the lock to avoid a data race with the background thread.
+        let rl = lock.withLock { runLoop }
+        if let rl { CFRunLoopStop(rl) }
+
+        // Release the retain taken in start() — guarded to only happen once.
+        if let ptr = selfRetainPointer {
+            Unmanaged<CursorTelemetry>.fromOpaque(ptr).release()
+            selfRetainPointer = nil
         }
-        // Release the retain taken in start().
-        if eventTap != nil {
-            Unmanaged.passUnretained(self).release()
-        }
+
         eventTap = nil
         runLoopSource = nil
-        runLoop = nil
-        thread = nil
+        lock.withLock { runLoop = nil }
+        tapThread = nil
     }
 
     // MARK: - Export & persistence
@@ -171,7 +202,8 @@ public final class CursorTelemetry: @unchecked Sendable {
 
     private func handleCGEvent(type: CGEventType, event: CGEvent) {
         let location = event.location
-        let timestamp = ProcessInfo.processInfo.systemUptime
+        // Timestamp is relative to when start() was called, not absolute uptime.
+        let timestamp = ProcessInfo.processInfo.systemUptime - startTime
 
         let eventType: CursorEventType
         switch type {
@@ -194,8 +226,14 @@ public final class CursorTelemetry: @unchecked Sendable {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
-        if let rl = runLoop {
-            CFRunLoopStop(rl)
+        // Use the lock-protected accessor to avoid reading runLoop on an arbitrary thread.
+        let rl = lock.withLock { runLoop }
+        if let rl { CFRunLoopStop(rl) }
+
+        // Release the retain taken in start() if stop() was never called.
+        if let ptr = selfRetainPointer {
+            Unmanaged<CursorTelemetry>.fromOpaque(ptr).release()
+            selfRetainPointer = nil
         }
     }
 }
