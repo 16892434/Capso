@@ -3,6 +3,7 @@ import AVFoundation
 import AVKit
 import Observation
 import EditorKit
+import EffectsKit
 import ExportKit
 import SharedKit
 
@@ -142,21 +143,72 @@ final class EditorCoordinator {
 
     // MARK: - Export
 
+    var hasCompositingEffects: Bool {
+        project.backgroundStyle.enabled ||
+        !project.zoomSegments.isEmpty ||
+        !project.trimRegions.isEmpty ||
+        project.cursorSmoothing.enabled
+    }
+
     func exportVideo(format: ExportFormat, quality: ExportQuality, destination: URL) async throws -> URL {
         isExporting = true
         exportProgress = 0
         defer { isExporting = false }
 
-        let options = ExportOptions(format: format, quality: quality, destination: destination)
-        let result = try await VideoExporter.export(
+        if hasCompositingEffects {
+            return try await exportWithCompositor(format: format, quality: quality, destination: destination)
+        } else {
+            let options = ExportOptions(format: format, quality: quality, destination: destination)
+            return try await VideoExporter.export(
+                source: project.sourceVideoURL,
+                options: options
+            ) { [weak self] progress in
+                Task { @MainActor in
+                    self?.exportProgress = progress
+                }
+            }
+        }
+    }
+
+    private func exportWithCompositor(
+        format: ExportFormat,
+        quality: ExportQuality,
+        destination: URL
+    ) async throws -> URL {
+        var cursorTimeline: SmoothedCursorTimeline?
+        if project.cursorSmoothing.enabled, let telemetryURL = project.cursorTelemetryURL {
+            if let telemetryData = try? CursorTelemetry.load(from: telemetryURL) {
+                let smoother = CursorSmoother(
+                    telemetry: telemetryData,
+                    config: project.cursorSmoothing
+                )
+                cursorTimeline = smoother.buildSmoothedTimeline(
+                    fps: 60,
+                    duration: project.videoDuration
+                )
+            }
+        }
+
+        var zoomInterpolator: ZoomInterpolator?
+        if !project.zoomSegments.isEmpty {
+            zoomInterpolator = ZoomInterpolator(
+                segments: project.zoomSegments,
+                frameSize: project.videoSize
+            )
+        }
+
+        return try await CompositorExporter.export(
             source: project.sourceVideoURL,
-            options: options
+            project: project,
+            cursorTimeline: cursorTimeline,
+            zoomInterpolator: zoomInterpolator,
+            destination: destination,
+            quality: quality
         ) { [weak self] progress in
             Task { @MainActor in
                 self?.exportProgress = progress
             }
         }
-        return result
     }
 
     // MARK: - Time Formatting
