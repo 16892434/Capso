@@ -385,15 +385,18 @@ final class RecordingCoordinator {
                 let format = result.format as RecordingKit.RecordingFormat
                 saveRecordingToHistory(url: tempURL, format: format)
 
-                openEditor(tempURL: tempURL, cursorTelemetryURL: cursorTelemetryURL)
-
-                // Preview flow replaced by editor:
-                // let thumbnail = await VideoThumbnail.extractThumbnail(from: tempURL)
-                // let nsThumb = thumbnail.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
-                // let size = VideoThumbnail.formattedFileSize(VideoThumbnail.fileSize(at: tempURL))
-                // let duration = VideoThumbnail.formattedDuration(result.duration)
-                // showRecordingPreview(thumbnail: nsThumb, duration: duration, fileSize: size,
-                //                     tempURL: tempURL, format: result.format as RecordingKit.RecordingFormat)
+                if settings.openEditorAfterRecording {
+                    // Open the full recording editor (trim, zoom, export)
+                    openEditor(tempURL: tempURL, cursorTelemetryURL: cursorTelemetryURL)
+                } else {
+                    // Quick-preview flow: show thumbnail preview with Save/Copy/Discard
+                    let thumbnail = await VideoThumbnail.extractThumbnail(from: tempURL)
+                    let nsThumb = thumbnail.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
+                    let size = VideoThumbnail.formattedFileSize(VideoThumbnail.fileSize(at: tempURL))
+                    let duration = VideoThumbnail.formattedDuration(result.duration)
+                    showRecordingPreview(thumbnail: nsThumb, duration: duration, fileSize: size,
+                                        tempURL: tempURL, format: result.format as RecordingKit.RecordingFormat)
+                }
             } catch {
                 print("Failed to stop/save recording: \(error)")
                 hideRecordingUI()
@@ -529,6 +532,11 @@ final class RecordingCoordinator {
             )
 
             let coordinator = EditorCoordinator(project: project)
+            coordinator.onClose = { [weak self] in
+                self?.editorWindow?.close()
+                self?.editorWindow = nil
+                self?.editorCoordinator = nil
+            }
             let window = RecordingEditorWindow(coordinator: coordinator)
             self.editorCoordinator = coordinator
             self.editorWindow = window

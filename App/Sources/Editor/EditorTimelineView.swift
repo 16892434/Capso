@@ -97,22 +97,45 @@ struct EditorTimelineView: View {
         onDrag: @escaping (TimeInterval) -> Void
     ) -> some View {
         let x = timeToX(time, in: trackWidth)
-        let handleWidth: Double = 8
-        let offset = edge == .leading ? x - handleWidth : x
+        // Visible handle: 12pt wide so it's easier to see
+        let handleWidth: Double = 12
+        // Invisible hit area: 28pt wide so small touches at the edge register
+        let hitAreaWidth: Double = 28
 
-        return RoundedRectangle(cornerRadius: 2)
-            .fill(Color.orange.opacity(0.8))
-            .frame(width: handleWidth, height: 44)
-            .offset(x: offset)
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        let newTime = xToTime(value.location.x, in: trackWidth)
-                        let clamped = max(0, min(coordinator.duration, newTime))
-                        onDrag(clamped)
-                    }
-            )
-            .help(edge == .leading ? "Drag to trim start" : "Drag to trim end")
+        // Keep the visible bar inset from the edge so it's never clipped:
+        // leading handle sits to the RIGHT of x, trailing sits to the LEFT.
+        // This ensures both handles are always within the track bounds.
+        let visibleOffset = edge == .leading
+            ? max(0, x)                           // never goes negative
+            : min(trackWidth - handleWidth, x - handleWidth)
+
+        // The hit area is centered on the visible bar
+        let hitOffset = visibleOffset - (hitAreaWidth - handleWidth) / 2
+
+        return ZStack {
+            // Invisible oversized tap/drag region gives a larger click target
+            Color.clear
+                .frame(width: hitAreaWidth, height: 44)
+
+            // Visible orange bar
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.orange.opacity(0.85))
+                .frame(width: handleWidth, height: 44)
+        }
+        .offset(x: hitOffset)
+        // highPriorityGesture ensures the handle drag takes precedence over
+        // the parent ZStack's onTapGesture (seek) handler.
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    // value.location is in the ZStack coordinate space (0…trackWidth),
+                    // so we can convert directly to time with xToTime.
+                    let newTime = xToTime(value.location.x, in: trackWidth)
+                    let clamped = max(0, min(coordinator.duration, newTime))
+                    onDrag(clamped)
+                }
+        )
+        .help(edge == .leading ? "Drag to trim start" : "Drag to trim end")
     }
 
     // MARK: - Trim Region Row

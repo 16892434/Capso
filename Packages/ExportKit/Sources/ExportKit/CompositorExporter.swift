@@ -63,10 +63,16 @@ public enum CompositorExporter {
 
         let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-        // MARK: AVAssetReader setup
+        // MARK: AVAssetReader setup — one reader per media type
+        //
+        // We use SEPARATE AVAssetReader instances for video and audio.
+        // A single reader cannot be reliably read in two independent loops:
+        // once the video loop drains the reader to .completed, the audio
+        // output's buffer queue may be exhausted or the reader refuses to
+        // produce more samples, resulting in silent exported files.
 
-        guard let reader = try? AVAssetReader(asset: asset) else {
-            throw ExportError.exportSessionFailed("Could not create AVAssetReader")
+        guard let videoReader = try? AVAssetReader(asset: asset) else {
+            throw ExportError.exportSessionFailed("Could not create AVAssetReader for video")
         }
 
         // Video: decode to BGRA pixels
@@ -78,20 +84,25 @@ public enum CompositorExporter {
             outputSettings: videoOutputSettings
         )
         videoOutput.alwaysCopiesSampleData = false
-        guard reader.canAdd(videoOutput) else {
+        guard videoReader.canAdd(videoOutput) else {
             throw ExportError.exportSessionFailed("Cannot add video reader output")
         }
-        reader.add(videoOutput)
+        videoReader.add(videoOutput)
 
         // Audio: passthrough (nil outputSettings = compressed passthrough)
+        // Uses its own dedicated AVAssetReader so it can be read independently
+        // of the video loop without the two competing for the same reader state.
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
         var audioOutput: AVAssetReaderTrackOutput?
-        if let audioTrack = audioTracks.first {
+        var audioReader: AVAssetReader?
+        if let audioTrack = audioTracks.first,
+           let ar = try? AVAssetReader(asset: asset) {
             let ao = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: nil)
             ao.alwaysCopiesSampleData = false
-            if reader.canAdd(ao) {
-                reader.add(ao)
+            if ar.canAdd(ao) {
+                ar.add(ao)
                 audioOutput = ao
+                audioReader = ar
             }
         }
 
@@ -145,8 +156,13 @@ public enum CompositorExporter {
 
         // MARK: Start reading + writing
 
-        guard reader.startReading() else {
-            throw ExportError.exportSessionFailed("AVAssetReader failed to start: \(reader.error?.localizedDescription ?? "unknown")")
+        guard videoReader.startReading() else {
+            throw ExportError.exportSessionFailed("AVAssetReader (video) failed to start: \(videoReader.error?.localizedDescription ?? "unknown")")
+        }
+        if let audioReader {
+            guard audioReader.startReading() else {
+                throw ExportError.exportSessionFailed("AVAssetReader (audio) failed to start: \(audioReader.error?.localizedDescription ?? "unknown")")
+            }
         }
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
@@ -250,8 +266,11 @@ public enum CompositorExporter {
 
         // MARK: Finalize
 
-        if reader.status == .failed {
-            throw ExportError.exportSessionFailed("AVAssetReader failed: \(reader.error?.localizedDescription ?? "unknown")")
+        if videoReader.status == .failed {
+            throw ExportError.exportSessionFailed("AVAssetReader (video) failed: \(videoReader.error?.localizedDescription ?? "unknown")")
+        }
+        if let audioReader, audioReader.status == .failed {
+            throw ExportError.exportSessionFailed("AVAssetReader (audio) failed: \(audioReader.error?.localizedDescription ?? "unknown")")
         }
 
         await writer.finishWriting()

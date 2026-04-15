@@ -26,6 +26,16 @@ final class EditorCoordinator {
     var isExporting: Bool = false
     var exportProgress: Double = 0
 
+    // MARK: - Window lifecycle
+
+    /// Called when the editor should close itself (e.g. after a successful export).
+    /// Set by the owner (RecordingCoordinator) to tear down the window.
+    var onClose: (() -> Void)?
+
+    func closeEditor() {
+        onClose?()
+    }
+
     // MARK: - Private
 
     nonisolated(unsafe) private var timeObserver: Any?

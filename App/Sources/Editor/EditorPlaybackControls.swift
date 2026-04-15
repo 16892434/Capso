@@ -75,6 +75,8 @@ struct EditorPlaybackControls: View {
                     quality: .maximum,
                     destination: url
                 )
+                // Close the editor window on successful export
+                coordinator.closeEditor()
             } catch {
                 await showExportError(error)
             }
@@ -94,6 +96,8 @@ struct EditorPlaybackControls: View {
                 )
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([url as NSURL])
+                // Close the editor window on successful export
+                coordinator.closeEditor()
             } catch {
                 await showExportError(error)
             }
