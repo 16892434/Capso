@@ -17,7 +17,7 @@ struct RecordingEditorView: View {
                 Divider()
 
                 EditorSettingsPanel(coordinator: coordinator)
-                    .frame(width: 220)
+                    .frame(width: 260)
             }
             .frame(maxHeight: .infinity)
 

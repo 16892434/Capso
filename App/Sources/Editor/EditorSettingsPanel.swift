@@ -1,6 +1,5 @@
 import SwiftUI
 import EditorKit
-import ExportKit
 import SharedKit
 
 struct EditorSettingsPanel: View {
@@ -9,14 +8,12 @@ struct EditorSettingsPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Settings")
-                    .font(.system(size: 15, weight: .semibold))
+                Text("Effects")
+                    .font(.system(size: 16, weight: .semibold))
                     .padding(.top, 4)
 
                 backgroundSection
-                zoomSection
                 cursorSection
-                exportSection
             }
             .padding(16)
         }
@@ -35,77 +32,107 @@ struct EditorSettingsPanel: View {
                 )
 
                 if coordinator.project.backgroundStyle.enabled {
-                    Divider().background(Color.white.opacity(0.06))
+                    cardDivider
 
-                    settingPickerRow("Type", selection: $coordinator.project.backgroundStyle.colorType) {
+                    // Color type picker
+                    settingPickerRow("Style", selection: $coordinator.project.backgroundStyle.colorType) {
                         Text("Solid").tag(BackgroundColorType.solid)
                         Text("Gradient").tag(BackgroundColorType.gradient)
                     }
 
-                    Divider().background(Color.white.opacity(0.06))
+                    cardDivider
 
-                    settingSliderRow(
+                    // Color presets
+                    if coordinator.project.backgroundStyle.colorType == .solid {
+                        colorPresetRow
+                    }
+
+                    cardDivider
+
+                    // Padding — vertical layout for full-width slider
+                    verticalSliderRow(
                         "Padding",
                         value: $coordinator.project.backgroundStyle.padding,
                         range: 0...80,
-                        unit: "pt"
+                        unit: "px"
                     )
 
-                    settingSliderRow(
-                        "Corners",
+                    // Corner radius
+                    verticalSliderRow(
+                        "Corner Radius",
                         value: $coordinator.project.backgroundStyle.cornerRadius,
                         range: 0...24,
-                        unit: "pt"
+                        unit: "px"
                     )
 
-                    Divider().background(Color.white.opacity(0.06))
+                    cardDivider
 
+                    // Shadow
                     settingToggleRow(
                         "Shadow",
                         isOn: $coordinator.project.backgroundStyle.shadowEnabled
                     )
 
                     if coordinator.project.backgroundStyle.shadowEnabled {
-                        settingSliderRow(
-                            "Radius",
+                        verticalSliderRow(
+                            "Shadow Radius",
                             value: $coordinator.project.backgroundStyle.shadowRadius,
                             range: 0...30,
-                            unit: "pt"
+                            unit: "px"
+                        )
+
+                        verticalSliderRow(
+                            "Shadow Opacity",
+                            value: $coordinator.project.backgroundStyle.shadowOpacity,
+                            range: 0...1,
+                            unit: "",
+                            precision: 2,
+                            step: 0.05
                         )
                     }
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: coordinator.project.backgroundStyle.enabled)
+            .animation(.easeInOut(duration: 0.15), value: coordinator.project.backgroundStyle.shadowEnabled)
         }
     }
 
-    // MARK: - Zoom Section
+    // MARK: - Color Presets
 
-    private var zoomSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Zoom")
+    private var colorPresetRow: some View {
+        HStack(spacing: 8) {
+            colorPresetButton(.darkGray, label: "Dark")
+            colorPresetButton(CodableColor(red: 0.95, green: 0.95, blue: 0.95), label: "Light")
+            colorPresetButton(.black, label: "Black")
+            colorPresetButton(CodableColor(red: 0.15, green: 0.2, blue: 0.35), label: "Navy")
+            colorPresetButton(CodableColor(red: 0.2, green: 0.12, blue: 0.25), label: "Plum")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
 
-            settingCard {
-                HStack {
-                    Text("Segments")
-                        .font(.system(size: 13))
-                    Spacer()
-                    Text("\(coordinator.project.zoomSegments.count)")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-
-                Divider().background(Color.white.opacity(0.06))
-
-                Text("Click on the timeline to add zoom segments. Zoom rendering will be enabled in a future update.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+    private func colorPresetButton(_ color: CodableColor, label: String) -> some View {
+        let isSelected = coordinator.project.backgroundStyle.solidColor == color
+        return Button {
+            coordinator.project.backgroundStyle.solidColor = color
+        } label: {
+            VStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(red: color.red, green: color.green, blue: color.blue))
+                    .frame(width: 32, height: 22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(
+                                isSelected ? Color.accentColor : Color.white.opacity(0.15),
+                                lineWidth: isSelected ? 2 : 0.5
+                            )
+                    )
+                Text(label)
+                    .font(.system(size: 9))
+                    .foregroundStyle(isSelected ? .primary : .tertiary)
             }
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Cursor Section
@@ -121,58 +148,20 @@ struct EditorSettingsPanel: View {
                 )
 
                 if coordinator.project.cursorSmoothing.enabled {
-                    Divider().background(Color.white.opacity(0.06))
+                    cardDivider
 
-                    HStack {
-                        Text("Style")
-                            .font(.system(size: 13))
-                        Spacer()
-                        Picker("", selection: smoothingPresetBinding) {
-                            Text("Snappy").tag(SmoothingPreset.snappy)
-                            Text("Smooth").tag(SmoothingPreset.smooth)
-                            Text("Floaty").tag(SmoothingPreset.floaty)
-                        }
-                        .frame(width: 100)
-                        .pickerStyle(.menu)
+                    settingPickerRow("Style", selection: smoothingPresetBinding) {
+                        Text("Snappy").tag(SmoothingPreset.snappy)
+                        Text("Smooth").tag(SmoothingPreset.smooth)
+                        Text("Floaty").tag(SmoothingPreset.floaty)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: coordinator.project.cursorSmoothing.enabled)
         }
     }
 
-    // MARK: - Export Section
-
-    private var exportSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Export")
-
-            settingCard {
-                HStack {
-                    Text("Format")
-                        .font(.system(size: 13))
-                    Spacer()
-                    Text("MP4 / GIF")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-
-                Divider().background(Color.white.opacity(0.06))
-
-                Text("Export uses the existing pipeline. Compositing effects will be added in a future update.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-            }
-        }
-    }
-
-    // MARK: - Smoothing Preset Binding
+    // MARK: - Smoothing Preset
 
     private enum SmoothingPreset {
         case snappy, smooth, floaty
@@ -188,12 +177,9 @@ struct EditorSettingsPanel: View {
             },
             set: { preset in
                 switch preset {
-                case .snappy:
-                    coordinator.project.cursorSmoothing = .snappy
-                case .smooth:
-                    coordinator.project.cursorSmoothing = .smooth
-                case .floaty:
-                    coordinator.project.cursorSmoothing = .floaty
+                case .snappy: coordinator.project.cursorSmoothing = .snappy
+                case .smooth: coordinator.project.cursorSmoothing = .smooth
+                case .floaty: coordinator.project.cursorSmoothing = .floaty
                 }
             }
         )
@@ -208,6 +194,10 @@ struct EditorSettingsPanel: View {
             .textCase(.uppercase)
             .tracking(0.8)
             .padding(.leading, 2)
+    }
+
+    private var cardDivider: some View {
+        Divider().background(Color.white.opacity(0.06))
     }
 
     private func settingCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -236,24 +226,37 @@ struct EditorSettingsPanel: View {
         .frame(minHeight: 36)
     }
 
-    private func settingSliderRow(
+    /// Vertical layout slider: label + value on top row, full-width slider below.
+    /// This gives the slider track maximum width for easy dragging.
+    private func verticalSliderRow(
         _ label: String,
         value: Binding<Double>,
         range: ClosedRange<Double>,
-        unit: String
+        unit: String,
+        precision: Int = 0,
+        step: Double = 1
     ) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.system(size: 13))
-                .frame(width: 60, alignment: .leading)
-            Slider(value: value, in: range, step: 1)
-            Text("\(Int(value.wrappedValue))\(unit)")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .frame(width: 36, alignment: .trailing)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if precision > 0 {
+                    Text(String(format: "%.\(precision)f\(unit)", value.wrappedValue))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text("\(Int(value.wrappedValue))\(unit)")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Slider(value: value, in: range, step: step)
+                .controlSize(.small)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
     }
 
     private func settingPickerRow<SelectionValue: Hashable, Content: View>(
@@ -268,7 +271,7 @@ struct EditorSettingsPanel: View {
             Picker("", selection: selection) {
                 content()
             }
-            .frame(width: 100)
+            .frame(width: 110)
             .pickerStyle(.menu)
         }
         .padding(.horizontal, 14)
