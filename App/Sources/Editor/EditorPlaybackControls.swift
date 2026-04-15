@@ -1,10 +1,15 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+import SharedKit
+import ExportKit
 
 struct EditorPlaybackControls: View {
-    let coordinator: EditorCoordinator
+    @Bindable var coordinator: EditorCoordinator
 
     var body: some View {
         HStack(spacing: 12) {
+            // Play/Pause
             Button(action: { coordinator.togglePlayback() }) {
                 Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 14, weight: .medium))
@@ -13,6 +18,7 @@ struct EditorPlaybackControls: View {
             }
             .buttonStyle(.plain)
 
+            // Time display
             Text(coordinator.formatTime(coordinator.currentTime))
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -21,7 +27,7 @@ struct EditorPlaybackControls: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
 
-            Text(coordinator.formatTime(coordinator.duration))
+            Text(coordinator.formatTime(coordinator.project.effectiveDuration))
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
 
@@ -30,18 +36,76 @@ struct EditorPlaybackControls: View {
             if coordinator.isExporting {
                 ProgressView(value: coordinator.exportProgress)
                     .progressViewStyle(.linear)
-                    .frame(width: 100)
+                    .frame(width: 120)
                     .controlSize(.small)
                 Text("\(Int(coordinator.exportProgress * 100))%")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .frame(width: 32, alignment: .trailing)
             } else {
-                Button("Export") {
-                    // Will be wired later
+                // Copy to clipboard
+                Button(action: { exportToClipboard() }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                // Save to file
+                Button(action: { exportToFile() }) {
+                    Label("Export", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
         }
+    }
+
+    private func exportToFile() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = "Recording.mp4"
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            do {
+                _ = try await coordinator.exportVideo(
+                    format: .mp4,
+                    quality: .maximum,
+                    destination: url
+                )
+            } catch {
+                await showExportError(error)
+            }
+        }
+    }
+
+    private func exportToClipboard() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent("\(UUID().uuidString).mp4")
+
+        Task {
+            do {
+                let url = try await coordinator.exportVideo(
+                    format: .mp4,
+                    quality: .maximum,
+                    destination: tempURL
+                )
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([url as NSURL])
+            } catch {
+                await showExportError(error)
+            }
+        }
+    }
+
+    @MainActor
+    private func showExportError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Export Failed")
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 }
