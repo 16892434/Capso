@@ -80,7 +80,9 @@ public struct SpringSimulator: Sendable {
             let a = displacement
             let b = velocity + omega0 * displacement
             newPosition = target + e * (a + b * dt)
-            newVelocity = e * (velocity - omega0 * (a + b * dt) + b)
+            // x(t)  = target + (a + b*t) * e^(-ω₀*t)
+            // x'(t) = e^(-ω₀*t) * (b - ω₀*(a + b*t))
+            newVelocity = e * (b - omega0 * (a + b * dt))
 
         } else if zeta < 1.0 {
             // ─── Underdamped (oscillatory) ─────────────────────────────────
