@@ -1,5 +1,6 @@
 // App/Sources/Recording/RecordingCoordinator.swift
 import AppKit
+import AVFoundation
 import Observation
 import HistoryKit
 import RecordingKit
@@ -8,6 +9,7 @@ import CaptureKit
 import SharedKit
 import ExportKit
 import EffectsKit
+import EditorKit
 
 /// Orchestrates recording flow:
 /// 1. Show overlay for area selection (drag or Space for window)
@@ -30,6 +32,8 @@ final class RecordingCoordinator {
     private var borderWindow: RecordingBorderWindow?
     private var cameraPiPWindow: CameraPiPWindow?
     private var recordingPreviewWindow: RecordingPreviewWindow?
+    private var editorWindow: RecordingEditorWindow?
+    private var editorCoordinator: EditorCoordinator?
     private var clickMonitor: ClickMonitor?
     private var cursorTelemetry: CursorTelemetry?
     private var clickHighlightWindow: ClickHighlightWindow?
@@ -381,14 +385,15 @@ final class RecordingCoordinator {
                 let format = result.format as RecordingKit.RecordingFormat
                 saveRecordingToHistory(url: tempURL, format: format)
 
-                // Extract thumbnail and show preview
-                let thumbnail = await VideoThumbnail.extractThumbnail(from: tempURL)
-                let nsThumb = thumbnail.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
-                let size = VideoThumbnail.formattedFileSize(VideoThumbnail.fileSize(at: tempURL))
-                let duration = VideoThumbnail.formattedDuration(result.duration)
+                openEditor(tempURL: tempURL, cursorTelemetryURL: cursorTelemetryURL)
 
-                showRecordingPreview(thumbnail: nsThumb, duration: duration, fileSize: size,
-                                    tempURL: tempURL, format: result.format as RecordingKit.RecordingFormat)
+                // Preview flow replaced by editor:
+                // let thumbnail = await VideoThumbnail.extractThumbnail(from: tempURL)
+                // let nsThumb = thumbnail.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
+                // let size = VideoThumbnail.formattedFileSize(VideoThumbnail.fileSize(at: tempURL))
+                // let duration = VideoThumbnail.formattedDuration(result.duration)
+                // showRecordingPreview(thumbnail: nsThumb, duration: duration, fileSize: size,
+                //                     tempURL: tempURL, format: result.format as RecordingKit.RecordingFormat)
             } catch {
                 print("Failed to stop/save recording: \(error)")
                 hideRecordingUI()
@@ -503,6 +508,32 @@ final class RecordingCoordinator {
         alert.informativeText = String(localized: "Copying the \(kind) to the clipboard failed. The recording is still available in the preview — close this dialog and try Copy again, or use Save.")
         alert.addButton(withTitle: String(localized: "OK"))
         alert.runModal()
+    }
+
+    func openEditor(tempURL: URL, cursorTelemetryURL: URL?) {
+        Task {
+            let asset = AVURLAsset(url: tempURL)
+            let duration = (try? await asset.load(.duration).seconds) ?? 0
+            let tracks = try? await asset.loadTracks(withMediaType: .video)
+            let naturalSize = (try? await tracks?.first?.load(.naturalSize)) ?? .zero
+
+            let project = RecordingProject(
+                sourceVideoURL: tempURL,
+                cursorTelemetryURL: cursorTelemetryURL,
+                videoDuration: duration,
+                videoSize: naturalSize,
+                recordingAreaSize: CGSize(
+                    width: selectedRect.width,
+                    height: selectedRect.height
+                )
+            )
+
+            let coordinator = EditorCoordinator(project: project)
+            let window = RecordingEditorWindow(coordinator: coordinator)
+            self.editorCoordinator = coordinator
+            self.editorWindow = window
+            window.showCentered()
+        }
     }
 
     private func showRecordingPreview(thumbnail: NSImage?, duration: String, fileSize: String,

@@ -27,7 +27,7 @@ final class EditorCoordinator {
 
     // MARK: - Private
 
-    private var timeObserver: Any?
+    nonisolated(unsafe) private var timeObserver: Any?
     private let playerItem: AVPlayerItem
 
     // MARK: - Init
