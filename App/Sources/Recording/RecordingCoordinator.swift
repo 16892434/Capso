@@ -31,6 +31,7 @@ final class RecordingCoordinator {
     private var cameraPiPWindow: CameraPiPWindow?
     private var recordingPreviewWindow: RecordingPreviewWindow?
     private var clickMonitor: ClickMonitor?
+    private var cursorTelemetry: CursorTelemetry?
     private var clickHighlightWindow: ClickHighlightWindow?
     private var countdownWindow: CountdownWindow?
     private var escGlobalMonitor: Any?
@@ -338,6 +339,7 @@ final class RecordingCoordinator {
                 do {
                     try await self.recorder.startRecording(config: config)
                     self.startClickHighlight()
+                    self.startCursorTelemetry()
                     self.showRecordingControls()
                     self.showBorder()
                 } catch {
@@ -370,6 +372,7 @@ final class RecordingCoordinator {
         Task {
             do {
                 let result = try await recorder.stopRecording()
+                let cursorTelemetryURL = stopCursorTelemetry()
                 hideRecordingUI()
 
                 let tempURL = result.fileURL
@@ -642,6 +645,37 @@ final class RecordingCoordinator {
         clickHighlightWindow = nil
     }
 
+    private func startCursorTelemetry() {
+        let displayBounds = CGDisplayBounds(selectedDisplayID)
+        let globalRect = CGRect(
+            x: displayBounds.origin.x + selectedRect.origin.x,
+            y: displayBounds.origin.y + selectedRect.origin.y,
+            width: selectedRect.width,
+            height: selectedRect.height
+        )
+        let telemetry = CursorTelemetry(recordingRect: globalRect)
+        telemetry.start()
+        cursorTelemetry = telemetry
+    }
+
+    private func stopCursorTelemetry() -> URL? {
+        guard let telemetry = cursorTelemetry else { return nil }
+        telemetry.stop()
+        cursorTelemetry = nil
+
+        let recordingsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Capso/Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+        let telemetryURL = recordingsDir.appendingPathComponent("\(UUID().uuidString).cursor.json")
+        do {
+            try telemetry.save(to: telemetryURL)
+            return telemetryURL
+        } catch {
+            return nil
+        }
+    }
+
     private func showRecordingControls() {
         guard let screen = selectedScreen else { return }
 
@@ -704,6 +738,8 @@ final class RecordingCoordinator {
 
     private func hideRecordingUI() {
         stopClickHighlight()
+        cursorTelemetry?.stop()
+        cursorTelemetry = nil
         controlsWindow?.close()
         controlsWindow = nil
         borderWindow?.hide()
