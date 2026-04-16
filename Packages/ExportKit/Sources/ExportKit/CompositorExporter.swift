@@ -254,7 +254,12 @@ public enum CompositorExporter {
                 throw ExportError.exportSessionFailed("Failed to allocate output pixel buffer: \(status)")
             }
 
-            ciContext.render(composited, to: outputBuffer)
+            // Ensure the CIImage extent matches the output buffer exactly.
+            // CIFilter chains can produce images with non-zero origin or slightly
+            // wrong dimensions, which causes ciContext.render() to crash.
+            let renderRect = CGRect(origin: .zero, size: outputSize)
+            let safeImage = composited.cropped(to: renderRect)
+            ciContext.render(safeImage, to: outputBuffer, bounds: renderRect, colorSpace: CGColorSpaceCreateDeviceRGB())
 
             // Remap PTS: subtract accumulated trimmed time so there are no gaps
             let adjustedTime = remapTime(timeSec, sortedTrims: sortedTrims)

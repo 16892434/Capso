@@ -255,7 +255,9 @@ public final class FrameCompositor: Sendable {
               let blurFilter = CIFilter(name: "CIGaussianBlur") else {
             return blackRect
         }
-        blurFilter.setValue(blackRect, forKey: kCIInputImageKey)
+        // Clamp before blur to prevent edge artifacts
+        let clamped = blackRect.clampedToExtent()
+        blurFilter.setValue(clamped, forKey: kCIInputImageKey)
         blurFilter.setValue(blurRadius, forKey: kCIInputRadiusKey)
         let blurred = blurFilter.outputImage ?? blackRect
 
