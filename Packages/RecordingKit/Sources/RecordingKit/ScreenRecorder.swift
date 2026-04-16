@@ -158,13 +158,7 @@ public final class ScreenRecorder {
             throw RecordingError.noMatchingDisplay
         }
 
-        // Exclude our own app entirely so the recording border, click highlights,
-        // camera PiP, countdown, and any other Capso windows never appear in the
-        // captured video. Using excludingApplications (not excludingWindows) ensures
-        // windows created AFTER the filter is set up are also excluded dynamically.
-        let bundleID = Bundle.main.bundleIdentifier ?? ""
-        let ownApps = content.applications.filter { $0.bundleIdentifier == bundleID }
-        let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+        let filter = SCContentFilter(display: display, excludingWindows: [])
         let sc = SCStreamConfiguration()
 
         sc.width = dims.w
