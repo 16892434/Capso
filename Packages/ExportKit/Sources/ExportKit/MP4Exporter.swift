@@ -44,6 +44,9 @@ enum MP4Exporter {
 
         session.shouldOptimizeForNetworkUse = true
 
+        // AVAssetExportSession cannot overwrite existing files
+        try? FileManager.default.removeItem(at: destination)
+
         do {
             try await session.export(to: destination, as: .mp4)
         } catch is CancellationError {
