@@ -39,7 +39,7 @@ final class EditorCoordinator {
     // MARK: - Private
 
     nonisolated(unsafe) private var timeObserver: Any?
-    private let playerItem: AVPlayerItem
+    let playerItem: AVPlayerItem
 
     // MARK: - Init
 
@@ -219,6 +219,24 @@ final class EditorCoordinator {
     func setZoomFocusMode(id: UUID, mode: ZoomFocusMode) {
         guard let index = project.zoomSegments.firstIndex(where: { $0.id == id }) else { return }
         project.zoomSegments[index].focusMode = mode
+    }
+
+    // MARK: - Cursor Timeline (cached)
+
+    private var _cursorTimeline: SmoothedCursorTimeline?
+    private var _cursorTimelineBuilt = false
+
+    var cursorTimeline: SmoothedCursorTimeline? {
+        if !_cursorTimelineBuilt {
+            _cursorTimelineBuilt = true
+            if project.cursorSmoothing.enabled, let url = project.cursorTelemetryURL {
+                if let data = try? CursorTelemetry.load(from: url) {
+                    let smoother = CursorSmoother(telemetry: data, config: project.cursorSmoothing)
+                    _cursorTimeline = smoother.buildSmoothedTimeline(fps: 60, duration: project.videoDuration)
+                }
+            }
+        }
+        return _cursorTimeline
     }
 
     // MARK: - Export

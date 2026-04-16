@@ -8,15 +8,8 @@ struct RecordingEditorView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    EditorPreviewView(
-                        player: coordinator.player,
-                        backgroundStyle: coordinator.project.backgroundStyle
-                    )
-                    .padding(16)
-                    .animation(Animation.easeInOut(duration: 0.2), value: coordinator.project.backgroundStyle.enabled)
-                    .animation(Animation.easeInOut(duration: 0.15), value: coordinator.project.backgroundStyle.padding)
-                    .animation(Animation.easeInOut(duration: 0.15), value: coordinator.project.backgroundStyle.cornerRadius)
-                    .animation(Animation.easeInOut(duration: 0.15), value: coordinator.project.backgroundStyle.shadowEnabled)
+                    EditorPreviewView(coordinator: coordinator)
+                        .padding(16)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 

@@ -118,7 +118,7 @@ final class MetalPreviewRenderer: NSObject {
                 // Zoom transform.
                 let zoomTransform: FrameTransform
                 if let interp = zoomInterpolator {
-                    let cursorTuple = cursorPos.map { (x: $0.x, y: $0.y) }
+                    let cursorTuple = cursorPos.map { (x: Double($0.x), y: Double($0.y)) }
                     zoomTransform = interp.transform(at: time, cursorPosition: cursorTuple)
                 } else {
                     zoomTransform = .identity
