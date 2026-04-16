@@ -13,6 +13,7 @@ struct EditorSettingsPanel: View {
                     .padding(.top, 4)
 
                 backgroundSection
+                zoomSection
                 cursorSection
             }
             .padding(16)
@@ -181,6 +182,102 @@ struct EditorSettingsPanel: View {
                 case .snappy: coordinator.project.cursorSmoothing = .snappy
                 case .smooth: coordinator.project.cursorSmoothing = .smooth
                 case .floaty: coordinator.project.cursorSmoothing = .floaty
+                }
+            }
+        )
+    }
+
+    // MARK: - Zoom Section
+
+    private var zoomSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Zoom")
+
+            settingCard {
+                HStack {
+                    Text("Segments")
+                        .font(.system(size: 13))
+                    Spacer()
+                    Text("\(coordinator.project.zoomSegments.count)")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+
+                if let segment = coordinator.selectedZoomSegment {
+                    cardDivider
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Selected Segment")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 2)
+
+                    verticalSliderRow(
+                        "Zoom Level",
+                        value: zoomLevelBinding(for: segment.id),
+                        range: 1.25...5.0,
+                        unit: "x",
+                        precision: 1,
+                        step: 0.25
+                    )
+
+                    settingPickerRow("Focus", selection: focusModeBinding(for: segment.id)) {
+                        Text("Follow Cursor").tag(ZoomFocusTag.followCursor)
+                        Text("Center").tag(ZoomFocusTag.center)
+                    }
+
+                    cardDivider
+
+                    Button(role: .destructive) {
+                        coordinator.removeZoomSegment(id: segment.id)
+                    } label: {
+                        Label("Delete Segment", systemImage: "trash")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                } else {
+                    cardDivider
+
+                    Text("Double-click the zoom track to add segments.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                }
+            }
+        }
+    }
+
+    private enum ZoomFocusTag {
+        case followCursor, center
+    }
+
+    private func zoomLevelBinding(for id: UUID) -> Binding<Double> {
+        Binding(
+            get: { coordinator.project.zoomSegments.first { $0.id == id }?.zoomLevel ?? 1.5 },
+            set: { coordinator.setZoomLevel(id: id, level: $0) }
+        )
+    }
+
+    private func focusModeBinding(for id: UUID) -> Binding<ZoomFocusTag> {
+        Binding(
+            get: {
+                guard let seg = coordinator.project.zoomSegments.first(where: { $0.id == id }) else { return .followCursor }
+                if case .followCursor = seg.focusMode { return .followCursor }
+                return .center
+            },
+            set: { tag in
+                switch tag {
+                case .followCursor: coordinator.setZoomFocusMode(id: id, mode: .followCursor)
+                case .center: coordinator.setZoomFocusMode(id: id, mode: .manual(x: 0.5, y: 0.5))
                 }
             }
         )
