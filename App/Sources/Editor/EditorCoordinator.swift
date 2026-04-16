@@ -171,6 +171,56 @@ final class EditorCoordinator {
         return min(result, duration)
     }
 
+    // MARK: - Zoom Segments
+
+    var selectedZoomSegmentID: UUID?
+
+    var selectedZoomSegment: ZoomSegment? {
+        guard let id = selectedZoomSegmentID else { return nil }
+        return project.zoomSegments.first { $0.id == id }
+    }
+
+    func addZoomSegment(at time: TimeInterval) {
+        let dur = min(3.0, self.duration - time)
+        guard dur > 0.5 else { return }
+        let segment = ZoomSegment(startTime: time, endTime: time + dur, zoomLevel: 1.5, focusMode: .followCursor)
+        project.zoomSegments.append(segment)
+        selectedZoomSegmentID = segment.id
+    }
+
+    func removeZoomSegment(id: UUID) {
+        project.zoomSegments.removeAll { $0.id == id }
+        if selectedZoomSegmentID == id { selectedZoomSegmentID = nil }
+    }
+
+    func moveZoomSegment(id: UUID, to newStart: TimeInterval) {
+        guard let index = project.zoomSegments.firstIndex(where: { $0.id == id }) else { return }
+        let dur = project.zoomSegments[index].duration
+        let clamped = max(0, min(duration - dur, newStart))
+        project.zoomSegments[index].startTime = clamped
+        project.zoomSegments[index].endTime = clamped + dur
+    }
+
+    func resizeZoomSegment(id: UUID, newStart: TimeInterval? = nil, newEnd: TimeInterval? = nil) {
+        guard let index = project.zoomSegments.firstIndex(where: { $0.id == id }) else { return }
+        if let newStart {
+            project.zoomSegments[index].startTime = max(0, min(project.zoomSegments[index].endTime - 0.5, newStart))
+        }
+        if let newEnd {
+            project.zoomSegments[index].endTime = min(duration, max(project.zoomSegments[index].startTime + 0.5, newEnd))
+        }
+    }
+
+    func setZoomLevel(id: UUID, level: Double) {
+        guard let index = project.zoomSegments.firstIndex(where: { $0.id == id }) else { return }
+        project.zoomSegments[index].zoomLevel = max(1.25, min(5.0, level))
+    }
+
+    func setZoomFocusMode(id: UUID, mode: ZoomFocusMode) {
+        guard let index = project.zoomSegments.firstIndex(where: { $0.id == id }) else { return }
+        project.zoomSegments[index].focusMode = mode
+    }
+
     // MARK: - Export
 
     /// Only use CompositorExporter when background styling is enabled.
