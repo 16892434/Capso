@@ -17,11 +17,28 @@ struct EditorPreviewView: View {
         coordinator.project.backgroundStyle
     }
 
+    /// Video aspect ratio for constraining the preview area
+    private var videoAspectRatio: CGFloat {
+        let size = coordinator.project.videoSize
+        guard size.height > 0 else { return 16.0 / 9.0 }
+        return size.width / size.height
+    }
+
+    /// Aspect ratio including background padding
+    private var compositeAspectRatio: CGFloat {
+        let size = coordinator.project.videoSize
+        guard size.height > 0 else { return 16.0 / 9.0 }
+        let pad = bg.padding * 2
+        return (size.width + pad) / (size.height + pad)
+    }
+
     var body: some View {
         if bg.enabled {
             previewWithBackground
+                .aspectRatio(compositeAspectRatio, contentMode: .fit)
         } else {
             metalPreview
+                .aspectRatio(videoAspectRatio, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
     }
