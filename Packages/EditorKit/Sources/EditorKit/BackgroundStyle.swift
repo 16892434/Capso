@@ -2,10 +2,12 @@
 
 import Foundation
 
-/// Whether the background uses a solid color or a two-stop gradient.
+/// Background fill type for the area behind the video frame.
 public enum BackgroundColorType: String, Codable, Sendable {
     case solid
     case gradient
+    /// Blurred, saturation-boosted copy of the video frame as backdrop.
+    case liquidGlass
 }
 
 /// A Codable, platform-agnostic color representation using normalized RGBA components.

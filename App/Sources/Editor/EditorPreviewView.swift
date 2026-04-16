@@ -60,6 +60,15 @@ struct EditorPreviewView: View {
                 startPoint: gradientStartPoint,
                 endPoint: gradientEndPoint
             )
+        case .liquidGlass:
+            // Live preview: a second player view, heavily blurred, acts as backdrop.
+            // The actual export uses CIFilter-based compositing for pixel-perfect result.
+            PlayerView(player: player)
+                .scaleEffect(1.15) // overshoot so blur doesn't reveal edges
+                .blur(radius: 40)
+                .saturation(1.8)
+                .contrast(0.95)
+                .allowsHitTesting(false)
         }
     }
 

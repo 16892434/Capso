@@ -38,11 +38,12 @@ struct EditorSettingsPanel: View {
                     settingPickerRow("Style", selection: $coordinator.project.backgroundStyle.colorType) {
                         Text("Solid").tag(BackgroundColorType.solid)
                         Text("Gradient").tag(BackgroundColorType.gradient)
+                        Text("Liquid Glass").tag(BackgroundColorType.liquidGlass)
                     }
 
                     cardDivider
 
-                    // Color presets
+                    // Color presets (only for solid fills)
                     if coordinator.project.backgroundStyle.colorType == .solid {
                         colorPresetRow
                     }

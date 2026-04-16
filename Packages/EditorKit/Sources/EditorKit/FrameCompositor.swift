@@ -152,7 +152,7 @@ public final class FrameCompositor: Sendable {
         var composite: CIImage
 
         // 3. Build the background canvas.
-        let canvas = buildCanvas(in: canvasRect)
+        let canvas = buildCanvas(in: canvasRect, sourceFrame: frame)
 
         if backgroundStyle.shadowEnabled && backgroundStyle.shadowOpacity > 0 {
             let shadow = buildShadow(frameRect: frameRect)
@@ -267,7 +267,7 @@ public final class FrameCompositor: Sendable {
 
     // MARK: - Private: Canvas
 
-    private func buildCanvas(in rect: CGRect) -> CIImage {
+    private func buildCanvas(in rect: CGRect, sourceFrame: CIImage) -> CIImage {
         switch backgroundStyle.colorType {
         case .solid:
             let c = backgroundStyle.solidColor
@@ -276,7 +276,48 @@ public final class FrameCompositor: Sendable {
 
         case .gradient:
             return buildGradientCanvas(in: rect)
+
+        case .liquidGlass:
+            return buildLiquidGlassCanvas(in: rect, sourceFrame: sourceFrame)
         }
+    }
+
+    /// Blurred, saturation-boosted copy of the source frame scaled to fill the canvas.
+    private func buildLiquidGlassCanvas(in rect: CGRect, sourceFrame: CIImage) -> CIImage {
+        let srcExtent = sourceFrame.extent
+        guard srcExtent.width > 0, srcExtent.height > 0 else {
+            return CIImage(color: CIColor(red: 0.1, green: 0.1, blue: 0.1)).cropped(to: rect)
+        }
+
+        // Aspect-fill scale with overshoot so blur edges stay inside canvas
+        let coverScale = max(rect.width / srcExtent.width, rect.height / srcExtent.height) * 1.15
+        var ci = sourceFrame.transformed(by: CGAffineTransform(scaleX: coverScale, y: coverScale))
+
+        // Centre on canvas
+        let tx = rect.midX - ci.extent.midX
+        let ty = rect.midY - ci.extent.midY
+        ci = ci.transformed(by: CGAffineTransform(translationX: tx, y: ty))
+
+        // Boost saturation for richer glass-like colour bloom
+        if let f = CIFilter(name: "CIColorControls", parameters: [
+            kCIInputImageKey: ci,
+            kCIInputSaturationKey: 1.9,
+            kCIInputBrightnessKey: 0.0,
+            kCIInputContrastKey: 0.95,
+        ]), let out = f.outputImage {
+            ci = out
+        }
+
+        // Clamp before blur to prevent edge fade
+        let clamped = ci.clampedToExtent()
+        if let f = CIFilter(name: "CIGaussianBlur", parameters: [
+            kCIInputImageKey: clamped,
+            kCIInputRadiusKey: 120.0,
+        ]), let out = f.outputImage {
+            ci = out
+        }
+
+        return ci.cropped(to: rect)
     }
 
     private func buildGradientCanvas(in rect: CGRect) -> CIImage {
