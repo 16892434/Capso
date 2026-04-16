@@ -188,7 +188,19 @@ final class EditorCoordinator {
         if hasCompositingEffects {
             return try await exportWithCompositor(format: format, quality: quality, destination: destination)
         } else {
-            let options = ExportOptions(format: format, quality: quality, destination: destination)
+            // Build a time range from trim handles (head/tail trim)
+            let start = effectiveStartTime
+            let end = effectiveEndTime
+            let trimRange: CMTimeRange?
+            if start > 0.01 || end < duration - 0.01 {
+                let cmStart = CMTime(seconds: start, preferredTimescale: 600)
+                let cmDuration = CMTime(seconds: end - start, preferredTimescale: 600)
+                trimRange = CMTimeRange(start: cmStart, duration: cmDuration)
+            } else {
+                trimRange = nil
+            }
+
+            let options = ExportOptions(format: format, quality: quality, destination: destination, timeRange: trimRange)
             return try await VideoExporter.export(
                 source: project.sourceVideoURL,
                 options: options

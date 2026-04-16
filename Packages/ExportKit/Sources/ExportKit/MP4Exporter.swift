@@ -8,6 +8,7 @@ enum MP4Exporter {
         source: URL,
         quality: ExportQuality,
         destination: URL,
+        timeRange: CMTimeRange? = nil,
         progress: (@Sendable (Double) -> Void)?
     ) async throws -> URL {
         let asset = AVURLAsset(url: source)
@@ -43,6 +44,9 @@ enum MP4Exporter {
         }
 
         session.shouldOptimizeForNetworkUse = true
+        if let timeRange {
+            session.timeRange = timeRange
+        }
 
         // AVAssetExportSession cannot overwrite existing files
         try? FileManager.default.removeItem(at: destination)

@@ -1,5 +1,6 @@
 // Packages/ExportKit/Sources/ExportKit/ExportOptions.swift
 import Foundation
+import CoreMedia
 import SharedKit
 
 public enum ExportFormat: String, Sendable {
@@ -11,11 +12,14 @@ public struct ExportOptions: Sendable {
     public let format: ExportFormat
     public let quality: ExportQuality
     public let destination: URL
+    /// Optional time range to export. When set, only this portion of the source is exported.
+    public let timeRange: CMTimeRange?
 
-    public init(format: ExportFormat, quality: ExportQuality, destination: URL) {
+    public init(format: ExportFormat, quality: ExportQuality, destination: URL, timeRange: CMTimeRange? = nil) {
         self.format = format
         self.quality = quality
         self.destination = destination
+        self.timeRange = timeRange
     }
 }
 
