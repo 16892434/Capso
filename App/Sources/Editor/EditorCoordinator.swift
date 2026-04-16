@@ -221,19 +221,24 @@ final class EditorCoordinator {
         project.zoomSegments[index].focusMode = mode
     }
 
-    // MARK: - Cursor Timeline (cached)
+    // MARK: - Cursor Timeline
 
+    /// Cursor timeline — always loaded if telemetry data exists.
+    /// Used by zoom follow-cursor AND cursor smoothing.
     private var _cursorTimeline: SmoothedCursorTimeline?
     private var _cursorTimelineBuilt = false
 
     var cursorTimeline: SmoothedCursorTimeline? {
         if !_cursorTimelineBuilt {
             _cursorTimelineBuilt = true
-            if project.cursorSmoothing.enabled, let url = project.cursorTelemetryURL {
-                if let data = try? CursorTelemetry.load(from: url) {
-                    let smoother = CursorSmoother(telemetry: data, config: project.cursorSmoothing)
-                    _cursorTimeline = smoother.buildSmoothedTimeline(fps: 60, duration: project.videoDuration)
-                }
+            if let url = project.cursorTelemetryURL,
+               let data = try? CursorTelemetry.load(from: url) {
+                // Use smoothing config if enabled, otherwise raw positions
+                let config = project.cursorSmoothing.enabled
+                    ? project.cursorSmoothing
+                    : CursorSmoothingConfig(enabled: false)
+                let smoother = CursorSmoother(telemetry: data, config: config)
+                _cursorTimeline = smoother.buildSmoothedTimeline(fps: 60, duration: project.videoDuration)
             }
         }
         return _cursorTimeline
