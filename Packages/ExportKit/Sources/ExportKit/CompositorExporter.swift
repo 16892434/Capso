@@ -6,26 +6,15 @@ import CoreImage
 import EditorKit
 import SharedKit
 
-/// A frame-by-frame export pipeline that composites effects (zoom, cursor, background)
-/// into the output video using `FrameCompositor`.
+/// Exports a recording with visual effects (background, zoom) baked in.
 ///
-/// Use this instead of `MP4Exporter` when the recording project contains effects that
-/// must be baked into the exported file (e.g. background style, zoom segments).
+/// Uses `AVAssetExportSession` with a `AVMutableVideoComposition` that applies
+/// CIFilter-based compositing per frame. This is Apple's recommended approach
+/// for applying Core Image effects during export — it handles audio passthrough,
+/// frame timing, and encoding automatically. Much more reliable than manual
+/// AVAssetReader/Writer pipelines.
 public enum CompositorExporter {
 
-    // MARK: - Public API
-
-    /// Export a source video, compositing all project effects frame-by-frame.
-    ///
-    /// - Parameters:
-    ///   - source: URL of the raw `.mov` / `.mp4` source video.
-    ///   - project: Editor project containing trim, zoom, and background style.
-    ///   - cursorTimeline: Precomputed smoothed cursor positions, or `nil` to skip cursor overlay.
-    ///   - zoomInterpolator: Precomputed zoom interpolator, or `nil` to skip zoom effects.
-    ///   - destination: Output file URL (will be overwritten if it exists).
-    ///   - quality: H.264 encoding quality preset.
-    ///   - progress: Optional progress callback in `[0, 1]` range, called on the calling actor.
-    /// - Returns: The `destination` URL on success.
     public static func export(
         source: URL,
         project: RecordingProject,
@@ -36,359 +25,101 @@ public enum CompositorExporter {
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
 
-        // MARK: Asset + track inspection
-
         let asset = AVURLAsset(url: source)
-
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
         guard let videoTrack = videoTracks.first else {
-            throw ExportError.exportSessionFailed("No video track found in source file")
+            throw ExportError.frameExtractionFailed
         }
 
-        let naturalSize  = try await videoTrack.load(.naturalSize)
-        let nominalFPS   = try await videoTrack.load(.nominalFrameRate)
-        let duration     = try await asset.load(.duration)
-        let totalSeconds = CMTimeGetSeconds(duration)
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let nominalFPS = try await videoTrack.load(.nominalFrameRate)
+        let fps = nominalFPS > 0 ? nominalFPS : 30.0
 
-        // MARK: FrameCompositor
-
+        // Set up compositor
         let compositor = FrameCompositor(
             sourceSize: naturalSize,
             backgroundStyle: project.backgroundStyle,
             outputScale: 1.0
         )
-        let outputSize = compositor.outputSize
-
-        // MARK: CIContext (GPU-accelerated)
-
+        let outSize = compositor.outputSize
         let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-        // MARK: AVAssetReader setup — one reader per media type
-        //
-        // We use SEPARATE AVAssetReader instances for video and audio.
-        // A single reader cannot be reliably read in two independent loops:
-        // once the video loop drains the reader to .completed, the audio
-        // output's buffer queue may be exhausted or the reader refuses to
-        // produce more samples, resulting in silent exported files.
+        // Trim regions for time remapping
+        let sortedTrims = project.trimRegions.sorted { $0.startTime < $1.startTime }
 
-        guard let videoReader = try? AVAssetReader(asset: asset) else {
-            throw ExportError.exportSessionFailed("Could not create AVAssetReader for video")
-        }
+        // Create a video composition that applies effects per frame
+        let videoComposition = AVMutableVideoComposition(asset: asset) { request in
+            let sourceImage = request.sourceImage.clampedToExtent()
+            let timeSec = request.compositionTime.seconds
 
-        // Video: decode to BGRA pixels
-        let videoOutputSettings: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
-        let videoOutput = AVAssetReaderTrackOutput(
-            track: videoTrack,
-            outputSettings: videoOutputSettings
-        )
-        videoOutput.alwaysCopiesSampleData = false
-        guard videoReader.canAdd(videoOutput) else {
-            throw ExportError.exportSessionFailed("Cannot add video reader output")
-        }
-        videoReader.add(videoOutput)
-
-        // Audio: decode to float PCM so we can remap timestamps freely.
-        // Let AVFoundation auto-negotiate format from the source track
-        // (avoids hard-coded sample rate / channel count mismatches).
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-        var audioOutput: AVAssetReaderTrackOutput?
-        var audioReader: AVAssetReader?
-        if let audioTrack = audioTracks.first,
-           let ar = try? AVAssetReader(asset: asset) {
-            let audioDecompressSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVLinearPCMIsFloatKey: true,
-                AVLinearPCMBitDepthKey: 32,
-                AVLinearPCMIsNonInterleaved: false,
-            ]
-            let ao = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: audioDecompressSettings)
-            ao.alwaysCopiesSampleData = false
-            if ar.canAdd(ao) {
-                ar.add(ao)
-                audioOutput = ao
-                audioReader = ar
-            }
-        }
-
-        // MARK: AVAssetWriter setup
-
-        // Remove existing output file if present
-        try? FileManager.default.removeItem(at: destination)
-
-        guard let writer = try? AVAssetWriter(outputURL: destination, fileType: .mp4) else {
-            throw ExportError.exportSessionFailed("Could not create AVAssetWriter")
-        }
-
-        // Video input — H.264 with quality-scaled bitrate
-        let bitrate = Self.bitrate(for: quality, size: outputSize, fps: Double(nominalFPS))
-        let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: Int(outputSize.width),
-            AVVideoHeightKey: Int(outputSize.height),
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: bitrate
-            ]
-        ]
-        let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        videoInput.expectsMediaDataInRealTime = false
-
-        let pixelBufferAttributes: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: Int(outputSize.width),
-            kCVPixelBufferHeightKey as String: Int(outputSize.height)
-        ]
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: videoInput,
-            sourcePixelBufferAttributes: pixelBufferAttributes
-        )
-
-        guard writer.canAdd(videoInput) else {
-            throw ExportError.exportSessionFailed("Cannot add video writer input")
-        }
-        writer.add(videoInput)
-
-        // Audio input — encode float PCM → AAC.
-        var audioInput: AVAssetWriterInput?
-        if audioOutput != nil {
-            // Use 128kbps AAC. Let AVAssetWriter infer sample rate and channels
-            // from the first audio buffer it receives.
-            let audioEncodeSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVEncoderBitRateKey: 128_000,
-            ]
-            let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: audioEncodeSettings)
-            ai.expectsMediaDataInRealTime = false
-            if writer.canAdd(ai) {
-                writer.add(ai)
-                audioInput = ai
-            }
-        }
-
-        // MARK: Start reading + writing
-
-        guard videoReader.startReading() else {
-            throw ExportError.exportSessionFailed("AVAssetReader (video) failed to start: \(videoReader.error?.localizedDescription ?? "unknown")")
-        }
-        if let audioReader {
-            guard audioReader.startReading() else {
-                throw ExportError.exportSessionFailed("AVAssetReader (audio) failed to start: \(audioReader.error?.localizedDescription ?? "unknown")")
-            }
-        }
-        writer.startWriting()
-        writer.startSession(atSourceTime: .zero)
-
-        // MARK: Video frame loop
-
-        let trimRegions = project.trimRegions
-        // Sort trim regions by start time for efficient offset calculation
-        let sortedTrims = trimRegions.sorted { $0.startTime < $1.startTime }
-
-        while let sampleBuffer = videoOutput.copyNextSampleBuffer() {
-            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            let timeSec = CMTimeGetSeconds(presentationTime)
-
-            // Skip frames that fall inside a trim region
-            if isTimeTrimmed(timeSec, trimRegions: trimRegions) {
-                continue
-            }
-
-            // Report progress (capped at 0.95 — the final 5% is finalization)
-            if totalSeconds > 0 {
-                progress?(min(0.95, timeSec / totalSeconds))
-            }
-
-            // Wait until the writer input is ready (bail if writer failed)
-            while !videoInput.isReadyForMoreMediaData {
-                if writer.status == .failed {
-                    throw ExportError.exportSessionFailed("Writer failed during video: \(writer.error?.localizedDescription ?? "unknown")")
-                }
-                try await Task.sleep(for: .milliseconds(10))
-            }
-
-            // Decode pixel buffer → CIImage
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-                continue
-            }
-            let sourceImage = CIImage(cvPixelBuffer: pixelBuffer)
-
-            // Compute zoom transform + cursor position at this timestamp
+            // Compute zoom transform
+            let cursorPos = cursorTimeline?.position(at: timeSec)
             let zoomTransform: FrameTransform
-            let cursorPos: CGPoint?
-
-            if let interp = zoomInterpolator, let timeline = cursorTimeline {
-                let rawCursor = timeline.position(at: timeSec)
-                let transform = interp.transform(
-                    at: timeSec,
-                    cursorPosition: (x: rawCursor.x, y: rawCursor.y)
-                )
-                zoomTransform = transform
-                cursorPos = CGPoint(x: rawCursor.x, y: rawCursor.y)
-            } else if let interp = zoomInterpolator {
-                zoomTransform = interp.transform(at: timeSec, cursorPosition: nil)
-                cursorPos = nil
+            if let interp = zoomInterpolator {
+                let cp = cursorPos.map { (x: $0.x, y: $0.y) }
+                zoomTransform = interp.transform(at: timeSec, cursorPosition: cp)
             } else {
                 zoomTransform = .identity
-                cursorPos = cursorTimeline.map {
-                    let p = $0.position(at: timeSec)
-                    return CGPoint(x: p.x, y: p.y)
-                }
             }
 
             // Composite the frame
+            let cgCursorPos = cursorPos.map { CGPoint(x: $0.x, y: $0.y) }
             let composited = compositor.compose(
-                frame: sourceImage,
+                frame: sourceImage.cropped(to: CGRect(origin: .zero, size: naturalSize)),
                 zoomTransform: zoomTransform,
-                cursorPosition: cursorPos,
-                cursorImage: nil   // cursor image overlay not yet wired (telemetry only)
+                cursorPosition: cgCursorPos,
+                cursorImage: nil
             )
 
-            // Render CIImage → CVPixelBuffer
-            guard let pool = adaptor.pixelBufferPool else {
-                throw ExportError.exportSessionFailed("Pixel buffer pool unavailable")
-            }
-            var outputBuffer: CVPixelBuffer?
-            let status = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &outputBuffer)
-            guard status == kCVReturnSuccess, let outputBuffer else {
-                throw ExportError.exportSessionFailed("Failed to allocate output pixel buffer: \(status)")
-            }
+            // Ensure output matches expected size
+            let outputRect = CGRect(origin: .zero, size: outSize)
+            let finalImage = composited.cropped(to: outputRect)
 
-            // Ensure the CIImage extent matches the output buffer exactly.
-            // CIFilter chains can produce images with non-zero origin or slightly
-            // wrong dimensions, which causes ciContext.render() to crash.
-            let renderRect = CGRect(origin: .zero, size: outputSize)
-            let safeImage = composited.cropped(to: renderRect)
-            ciContext.render(safeImage, to: outputBuffer, bounds: renderRect, colorSpace: CGColorSpaceCreateDeviceRGB())
-
-            // Remap PTS: subtract accumulated trimmed time so there are no gaps
-            let adjustedTime = remapTime(timeSec, sortedTrims: sortedTrims)
-            let adjustedPTS = CMTime(seconds: adjustedTime, preferredTimescale: presentationTime.timescale)
-            adaptor.append(outputBuffer, withPresentationTime: adjustedPTS)
+            request.finish(with: finalImage, context: ciContext)
         }
 
-        // MARK: Audio passthrough loop
+        // Set output size and frame rate
+        videoComposition.renderSize = outSize
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
 
-        if let audioOutput, let audioInput {
-            while let sampleBuffer = audioOutput.copyNextSampleBuffer() {
-                let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                let timeSec = CMTimeGetSeconds(presentationTime)
-
-                if isTimeTrimmed(timeSec, trimRegions: trimRegions) {
-                    continue
-                }
-
-                while !audioInput.isReadyForMoreMediaData {
-                    if writer.status == .failed {
-                        throw ExportError.exportSessionFailed("Writer failed during audio: \(writer.error?.localizedDescription ?? "unknown")")
-                    }
-                    try await Task.sleep(for: .milliseconds(10))
-                }
-
-                // Remap audio PTS to match video timeline (no gaps from trims)
-                let adjustedTime = remapTime(timeSec, sortedTrims: sortedTrims)
-                let adjustedPTS = CMTime(seconds: adjustedTime, preferredTimescale: presentationTime.timescale)
-
-                // Create a new sample buffer with the adjusted timestamp
-                if let remapped = Self.remapSampleBuffer(sampleBuffer, to: adjustedPTS) {
-                    audioInput.append(remapped)
-                } else {
-                    audioInput.append(sampleBuffer)
-                }
-            }
-            audioInput.markAsFinished()
+        // Choose export preset
+        let presetName = switch quality {
+        case .maximum: AVAssetExportPresetHighestQuality
+        case .social: AVAssetExportPreset1920x1080
+        case .web: AVAssetExportPreset1280x720
         }
 
-        videoInput.markAsFinished()
-
-        // MARK: Finalize
-
-        if videoReader.status == .failed {
-            throw ExportError.exportSessionFailed("AVAssetReader (video) failed: \(videoReader.error?.localizedDescription ?? "unknown")")
-        }
-        if let audioReader, audioReader.status == .failed {
-            throw ExportError.exportSessionFailed("AVAssetReader (audio) failed: \(audioReader.error?.localizedDescription ?? "unknown")")
+        guard let session = AVAssetExportSession(asset: asset, presetName: presetName) else {
+            throw ExportError.exportSessionFailed("Could not create export session")
         }
 
-        await writer.finishWriting()
+        session.videoComposition = videoComposition
+        session.shouldOptimizeForNetworkUse = true
 
-        if writer.status == .failed {
-            throw ExportError.exportSessionFailed("AVAssetWriter failed: \(writer.error?.localizedDescription ?? "unknown")")
+        // Apply trim as time range if present
+        let effectiveStart = sortedTrims.filter { $0.startTime < 0.01 }.map(\.endTime).max() ?? 0
+        let duration = try await asset.load(.duration).seconds
+        let effectiveEnd = sortedTrims.filter { $0.endTime >= duration - 0.01 }.map(\.startTime).min() ?? duration
+
+        if effectiveStart > 0.01 || effectiveEnd < duration - 0.01 {
+            let cmStart = CMTime(seconds: effectiveStart, preferredTimescale: 600)
+            let cmDuration = CMTime(seconds: effectiveEnd - effectiveStart, preferredTimescale: 600)
+            session.timeRange = CMTimeRange(start: cmStart, duration: cmDuration)
+        }
+
+        // Remove existing file
+        try? FileManager.default.removeItem(at: destination)
+
+        // Export
+        do {
+            try await session.export(to: destination, as: .mp4)
+        } catch is CancellationError {
+            throw ExportError.cancelled
+        } catch {
+            throw ExportError.exportSessionFailed(error.localizedDescription)
         }
 
         progress?(1.0)
         return destination
-    }
-
-    // MARK: - Private helpers
-
-    /// Returns `true` if `time` falls within any of the given trim regions.
-    private static func isTimeTrimmed(_ time: TimeInterval, trimRegions: [TrimRegion]) -> Bool {
-        for region in trimRegions {
-            if time >= region.startTime && time < region.endTime {
-                return true
-            }
-        }
-        return false
-    }
-
-    /// Remap a source timestamp to the output timeline by subtracting
-    /// the total duration of all trim regions that come before this time.
-    /// This eliminates gaps (black frames) where trimmed content was removed.
-    private static func remapTime(_ time: TimeInterval, sortedTrims: [TrimRegion]) -> TimeInterval {
-        var offset: TimeInterval = 0
-        for trim in sortedTrims {
-            if trim.endTime <= time {
-                // This entire trim region is before our time — subtract its full duration
-                offset += trim.endTime - trim.startTime
-            } else if trim.startTime < time {
-                // We're partially past this trim region
-                offset += time - trim.startTime
-            }
-        }
-        return max(0, time - offset)
-    }
-
-    /// Create a copy of a CMSampleBuffer with a new presentation timestamp.
-    /// Used to remap audio sample timestamps after trimming.
-    private static func remapSampleBuffer(_ buffer: CMSampleBuffer, to newPTS: CMTime) -> CMSampleBuffer? {
-        var timingInfo = CMSampleTimingInfo(
-            duration: CMSampleBufferGetDuration(buffer),
-            presentationTimeStamp: newPTS,
-            decodeTimeStamp: .invalid
-        )
-        var newBuffer: CMSampleBuffer?
-        var count: CMItemCount = 0
-        CMSampleBufferGetSampleTimingInfoArray(buffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
-        let status = CMSampleBufferCreateCopyWithNewTiming(
-            allocator: nil,
-            sampleBuffer: buffer,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timingInfo,
-            sampleBufferOut: &newBuffer
-        )
-        return status == noErr ? newBuffer : nil
-    }
-
-    /// Computes an H.264 target bitrate in bits/second, scaling by resolution and frame rate.
-    ///
-    /// Base rates (in bits/s) at 1080p / 30 fps:
-    /// - maximum:  8 Mbps
-    /// - social:   5 Mbps
-    /// - web:      3 Mbps
-    private static func bitrate(for quality: ExportQuality, size: CGSize, fps: Double) -> Int {
-        let baseRate: Double = switch quality {
-        case .maximum: 8_000_000
-        case .social:  5_000_000
-        case .web:     3_000_000
-        }
-
-        let referencePixels = 1920.0 * 1080.0
-        let actualPixels    = Double(size.width) * Double(size.height)
-        let pixelScale      = actualPixels / referencePixels
-
-        let fpsFactor = (fps > 0 ? fps : 30) / 30.0
-
-        return Int(baseRate * pixelScale * fpsFactor)
     }
 }
