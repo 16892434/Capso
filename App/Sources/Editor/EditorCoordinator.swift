@@ -68,22 +68,31 @@ final class EditorCoordinator {
     }
 
     func play() {
-        if currentTime >= effectiveEndTime - 0.05 {
-            // Seek slightly past the start to avoid getting stuck on the trim boundary
-            let startTime = effectiveStartTime
-            let cmTime = CMTime(seconds: startTime + 0.01, preferredTimescale: 600)
-            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.currentTime = startTime
-                    self.player.play()
-                    self.isPlaying = true
-                }
-            }
-            return
+        let start = effectiveStartTime
+        let end = effectiveEndTime
+
+        // Determine where to begin playback
+        var playFrom = currentTime
+
+        // If at or past effective end, restart from beginning
+        if playFrom >= end - 0.05 {
+            playFrom = start + 0.1
         }
-        player.play()
-        isPlaying = true
+        // If at or before effective start (inside head trim), jump past it
+        else if playFrom <= start + 0.05 {
+            playFrom = start + 0.1
+        }
+
+        let cmTime = CMTime(seconds: playFrom, preferredTimescale: 600)
+        let capturedTime = playFrom
+        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [capturedTime] in
+                self.currentTime = capturedTime
+                self.player.play()
+                self.isPlaying = true
+            }
+        }
     }
 
     func pause() {
@@ -251,14 +260,17 @@ final class EditorCoordinator {
         ) { [weak self] cmTime in
             guard let self else { return }
             Task { @MainActor in
+                guard self.isPlaying else { return }
                 let time = cmTime.seconds
                 let adjusted = self.skipTrimRegions(from: time)
-                if adjusted != time {
+                // Only seek if we're meaningfully inside a trim region (>0.05s difference).
+                // Small differences are floating-point noise at boundaries.
+                if adjusted - time > 0.05 {
                     self.seek(to: adjusted)
                     return
                 }
                 self.currentTime = time
-                if time >= self.effectiveEndTime {
+                if time >= self.effectiveEndTime - 0.03 {
                     self.pause()
                     self.currentTime = self.effectiveEndTime
                 }
