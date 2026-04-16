@@ -46,6 +46,7 @@ final class RecordingEditorWindow: NSPanel {
         let x = screenFrame.midX - frame.width / 2
         let y = screenFrame.midY - frame.height / 2
         setFrameOrigin(NSPoint(x: x, y: y))
+        NSApp.activate(ignoringOtherApps: true)
         makeKeyAndOrderFront(nil)
     }
 }
