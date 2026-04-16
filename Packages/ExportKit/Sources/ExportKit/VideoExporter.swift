@@ -9,8 +9,8 @@ public enum VideoExporter {
         options: ExportOptions,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
-        guard FileManager.default.fileExists(atPath: source.path) else {
-            throw ExportError.sourceFileNotFound
+        guard FileManager.default.fileExists(atPath: source.path(percentEncoded: false)) else {
+            throw ExportError.exportSessionFailed("Source file not found at: \(source.path(percentEncoded: false))")
         }
 
         switch options.format {

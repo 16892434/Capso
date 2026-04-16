@@ -108,7 +108,7 @@ struct EditorPlaybackControls: View {
     private func showExportError(_ error: Error) {
         let alert = NSAlert()
         alert.messageText = String(localized: "Export Failed")
-        alert.informativeText = error.localizedDescription
+        alert.informativeText = String(describing: error)
         alert.alertStyle = .warning
         alert.runModal()
     }
