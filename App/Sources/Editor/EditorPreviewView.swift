@@ -2,22 +2,105 @@ import SwiftUI
 import AVKit
 @preconcurrency import EditorKit
 
-/// Video preview with real-time zoom, background, and cursor effects.
+/// Video preview with real-time zoom (Metal) + background effects (SwiftUI).
 ///
-/// Uses MetalPreviewView (MTKView + CIContext) for GPU-accelerated rendering
-/// of the composited frame on every display frame.
+/// Architecture:
+/// - Zoom: rendered in real-time via MetalPreviewView (AVPlayerItemVideoOutput → CIImage → FrameCompositor zoom only → MTKView)
+/// - Background: SwiftUI decorations (padding, color, shadow, corners) — reliable and flicker-free
+///
+/// The FrameCompositor in the Metal renderer is configured with background DISABLED
+/// so it only applies zoom transforms. Background styling is handled by the SwiftUI layer.
 struct EditorPreviewView: View {
     let coordinator: EditorCoordinator
 
+    private var bg: EditorKit.BackgroundStyle {
+        coordinator.project.backgroundStyle
+    }
+
     var body: some View {
+        if bg.enabled {
+            previewWithBackground
+        } else {
+            metalPreview
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+    }
+
+    /// Metal preview configured for zoom-only (no background compositing)
+    private var metalPreview: some View {
         MetalPreviewView(
             player: coordinator.player,
             playerItem: coordinator.playerItem,
-            backgroundStyle: coordinator.project.backgroundStyle,
+            backgroundStyle: EditorKit.BackgroundStyle(enabled: false), // zoom only
             zoomSegments: coordinator.project.zoomSegments,
             videoSize: coordinator.project.videoSize,
             cursorTimeline: coordinator.cursorTimeline
         )
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var previewWithBackground: some View {
+        ZStack {
+            backgroundFill
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            metalPreview
+                .clipShape(RoundedRectangle(cornerRadius: bg.cornerRadius))
+                .shadow(
+                    color: bg.shadowEnabled
+                        ? .black.opacity(bg.shadowOpacity)
+                        : .clear,
+                    radius: bg.shadowEnabled ? bg.shadowRadius : 0,
+                    y: bg.shadowEnabled ? bg.shadowRadius * 0.3 : 0
+                )
+                .padding(bg.padding)
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundFill: some View {
+        switch bg.colorType {
+        case .solid:
+            Color(red: bg.solidColor.red, green: bg.solidColor.green, blue: bg.solidColor.blue, opacity: bg.solidColor.alpha)
+        case .gradient:
+            LinearGradient(
+                colors: [
+                    Color(red: bg.gradientFrom.red, green: bg.gradientFrom.green, blue: bg.gradientFrom.blue),
+                    Color(red: bg.gradientTo.red, green: bg.gradientTo.green, blue: bg.gradientTo.blue),
+                ],
+                startPoint: gradientStartPoint,
+                endPoint: gradientEndPoint
+            )
+        case .liquidGlass:
+            // Second player view blurred as backdrop — same as before, proven to work
+            MetalPreviewView(
+                player: coordinator.player,
+                playerItem: coordinator.playerItem,
+                backgroundStyle: EditorKit.BackgroundStyle(enabled: false),
+                zoomSegments: [],
+                videoSize: coordinator.project.videoSize,
+                cursorTimeline: nil
+            )
+            .scaleEffect(1.15)
+            .blur(radius: 40)
+            .saturation(1.8)
+            .contrast(0.95)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var gradientStartPoint: UnitPoint {
+        let angle = bg.gradientAngle
+        return UnitPoint(
+            x: 0.5 - cos(angle * .pi / 180) * 0.5,
+            y: 0.5 - sin(angle * .pi / 180) * 0.5
+        )
+    }
+
+    private var gradientEndPoint: UnitPoint {
+        let angle = bg.gradientAngle
+        return UnitPoint(
+            x: 0.5 + cos(angle * .pi / 180) * 0.5,
+            y: 0.5 + sin(angle * .pi / 180) * 0.5
+        )
     }
 }
