@@ -68,8 +68,19 @@ final class EditorCoordinator {
     }
 
     func play() {
-        if currentTime >= effectiveEndTime {
-            seek(to: effectiveStartTime)
+        if currentTime >= effectiveEndTime - 0.05 {
+            // Seek slightly past the start to avoid getting stuck on the trim boundary
+            let startTime = effectiveStartTime
+            let cmTime = CMTime(seconds: startTime + 0.01, preferredTimescale: 600)
+            player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.currentTime = startTime
+                    self.player.play()
+                    self.isPlaying = true
+                }
+            }
+            return
         }
         player.play()
         isPlaying = true

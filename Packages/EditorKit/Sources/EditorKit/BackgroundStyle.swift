@@ -28,7 +28,7 @@ public struct CodableColor: Codable, Sendable, Equatable {
 }
 
 /// Describes the decorative background rendered behind the video in the editor output.
-public struct BackgroundStyle: Codable, Sendable {
+public struct BackgroundStyle: Codable, Sendable, Equatable {
     /// When `false`, the video is rendered without any background decoration.
     public var enabled: Bool
     public var colorType: BackgroundColorType
