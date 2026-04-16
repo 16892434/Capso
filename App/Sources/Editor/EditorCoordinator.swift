@@ -173,10 +173,10 @@ final class EditorCoordinator {
 
     // MARK: - Export
 
+    /// Only use CompositorExporter when background styling is enabled.
+    /// Trim/zoom/cursor are not yet baked into export.
     var hasCompositingEffects: Bool {
-        project.backgroundStyle.enabled ||
-        !project.zoomSegments.isEmpty ||
-        !project.trimRegions.isEmpty
+        project.backgroundStyle.enabled
         // Note: cursorSmoothing excluded — cursor overlay rendering not yet implemented
     }
 
