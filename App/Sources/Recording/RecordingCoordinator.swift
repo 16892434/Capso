@@ -744,11 +744,15 @@ final class RecordingCoordinator {
         // coordinates for the border window's frame.
         let screenFrame = screen.frame
         let viewY = screenFrame.height - selectedRect.origin.y - selectedRect.height
+        // Expand the border frame outward by the border width (3pt) so the
+        // border is drawn entirely OUTSIDE the capture area. This prevents
+        // ScreenCaptureKit from capturing the red border in the recording.
+        let borderInset: CGFloat = 3
         let borderFrame = CGRect(
-            x: selectedRect.origin.x + screenFrame.origin.x,
-            y: viewY + screenFrame.origin.y,
-            width: selectedRect.width,
-            height: selectedRect.height
+            x: selectedRect.origin.x + screenFrame.origin.x - borderInset,
+            y: viewY + screenFrame.origin.y - borderInset,
+            width: selectedRect.width + borderInset * 2,
+            height: selectedRect.height + borderInset * 2
         )
         borderWindow = RecordingBorderWindow(frame: borderFrame, screen: screen)
         borderWindow?.show()
