@@ -43,6 +43,10 @@ struct MetalPreviewView: NSViewRepresentable {
         // which is blocked when framebufferOnly == true.
         view.framebufferOnly = false
 
+        // Transparent background so letterbox areas show the window material, not black
+        view.layer?.isOpaque = false
+        view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+
         // Continuous rendering at ~30 fps — smooth enough for a preview without hammering GPU.
         view.isPaused = false
         view.enableSetNeedsDisplay = false
