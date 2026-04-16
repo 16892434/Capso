@@ -89,10 +89,7 @@ public enum CompositorExporter {
         }
         videoReader.add(videoOutput)
 
-        // Audio: decode to PCM so we can freely remap timestamps.
-        // CMSampleBufferCreateCopyWithNewTiming reliably works on uncompressed
-        // (LPCM) buffers; it often fails for compressed passthrough buffers,
-        // which would result in no audio in the exported file.
+        // Audio: passthrough (nil outputSettings = compressed passthrough)
         // Uses its own dedicated AVAssetReader so it can be read independently
         // of the video loop without the two competing for the same reader state.
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
@@ -100,16 +97,7 @@ public enum CompositorExporter {
         var audioReader: AVAssetReader?
         if let audioTrack = audioTracks.first,
            let ar = try? AVAssetReader(asset: asset) {
-            let audioDecompressSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-            ]
-            let ao = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: audioDecompressSettings)
+            let ao = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: nil)
             ao.alwaysCopiesSampleData = false
             if ar.canAdd(ao) {
                 ar.add(ao)
@@ -155,17 +143,10 @@ public enum CompositorExporter {
         }
         writer.add(videoInput)
 
-        // Audio input — encode PCM → AAC.
-        // The reader now produces LPCM; re-encode to AAC for a well-formed MP4.
+        // Audio input — passthrough
         var audioInput: AVAssetWriterInput?
         if audioOutput != nil {
-            let audioEncodeSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 256_000,
-            ]
-            let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: audioEncodeSettings)
+            let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
             ai.expectsMediaDataInRealTime = false
             if writer.canAdd(ai) {
                 writer.add(ai)

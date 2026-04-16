@@ -158,11 +158,7 @@ public final class ScreenRecorder {
             throw RecordingError.noMatchingDisplay
         }
 
-        // Exclude all windows belonging to our own app to avoid capturing
-        // the recording border, click highlights, camera PiP, countdown, etc.
-        let bundleID = Bundle.main.bundleIdentifier ?? ""
-        let ownWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID }
-        let filter = SCContentFilter(display: display, excludingWindows: ownWindows)
+        let filter = SCContentFilter(display: display, excludingWindows: [])
         let sc = SCStreamConfiguration()
 
         sc.width = dims.w
