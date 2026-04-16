@@ -223,11 +223,9 @@ final class EditorCoordinator {
 
     // MARK: - Export
 
-    /// Only use CompositorExporter when background styling is enabled.
-    /// Trim/zoom/cursor are not yet baked into export.
+    /// Use CompositorExporter when visual effects need to be baked into the export.
     var hasCompositingEffects: Bool {
-        project.backgroundStyle.enabled
-        // Note: cursorSmoothing excluded — cursor overlay rendering not yet implemented
+        project.backgroundStyle.enabled || !project.zoomSegments.isEmpty
     }
 
     func exportVideo(format: ExportFormat, quality: ExportQuality, destination: URL) async throws -> URL {

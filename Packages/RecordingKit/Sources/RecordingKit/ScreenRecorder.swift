@@ -158,7 +158,11 @@ public final class ScreenRecorder {
             throw RecordingError.noMatchingDisplay
         }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        // Exclude all Capso windows (border, controls toolbar, click highlights,
+        // camera PiP, countdown) so they don't appear in the recorded video.
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let ownApps = content.applications.filter { $0.bundleIdentifier == bundleID }
+        let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
         let sc = SCStreamConfiguration()
 
         sc.width = dims.w
