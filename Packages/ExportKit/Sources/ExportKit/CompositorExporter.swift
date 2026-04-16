@@ -206,11 +206,8 @@ public enum CompositorExporter {
                 progress?(min(0.95, timeSec / totalSeconds))
             }
 
-            // Wait until the writer input is ready (bail if writer failed)
+            // Wait until the writer input is ready
             while !videoInput.isReadyForMoreMediaData {
-                if writer.status == .failed {
-                    throw ExportError.exportSessionFailed("Writer failed during video: \(writer.error?.localizedDescription ?? "unknown")")
-                }
                 try await Task.sleep(for: .milliseconds(10))
             }
 
@@ -281,9 +278,6 @@ public enum CompositorExporter {
                 }
 
                 while !audioInput.isReadyForMoreMediaData {
-                    if writer.status == .failed {
-                        throw ExportError.exportSessionFailed("Writer failed during audio: \(writer.error?.localizedDescription ?? "unknown")")
-                    }
                     try await Task.sleep(for: .milliseconds(10))
                 }
 
