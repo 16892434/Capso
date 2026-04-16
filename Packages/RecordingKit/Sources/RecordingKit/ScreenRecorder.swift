@@ -160,9 +160,16 @@ public final class ScreenRecorder {
 
         // Exclude all Capso windows (border, controls toolbar, click highlights,
         // camera PiP, countdown) so they don't appear in the recorded video.
-        let bundleID = Bundle.main.bundleIdentifier ?? ""
-        let ownApps = content.applications.filter { $0.bundleIdentifier == bundleID }
-        let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+        // Match by process ID — more reliable than bundleIdentifier in debug builds.
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let ownApps = content.applications.filter { $0.processID == ownPID }
+        let filter: SCContentFilter
+        if !ownApps.isEmpty {
+            filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+        } else {
+            // Fallback: no exclusion if we can't find ourselves
+            filter = SCContentFilter(display: display, excludingWindows: [])
+        }
         let sc = SCStreamConfiguration()
 
         sc.width = dims.w
