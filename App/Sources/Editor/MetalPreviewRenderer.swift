@@ -34,8 +34,12 @@ final class MetalPreviewRenderer: NSObject {
     private var zoomInterpolator: ZoomInterpolator?
     private var cursorTimeline: SmoothedCursorTimeline?
 
-    /// Retained so we can show the last composited frame while paused.
-    private var lastFrameImage: CIImage?
+    /// Last raw (unprocessed) frame — kept so we can re-composite when settings change while paused.
+    private var lastRawFrame: CIImage?
+    /// Last composited frame — displayed when paused and settings haven't changed.
+    private var lastCompositedFrame: CIImage?
+    /// Set to true when compositor/zoom/cursor settings change, forcing a re-composite of lastRawFrame.
+    private var needsRecomposite = false
 
     // MARK: - Init
 
@@ -66,8 +70,9 @@ final class MetalPreviewRenderer: NSObject {
         compositor = FrameCompositor(
             sourceSize: sourceSize,
             backgroundStyle: backgroundStyle,
-            outputScale: 1.0   // pixel-buffer coordinates; scaling handled in renderFrame
+            outputScale: 1.0
         )
+        needsRecomposite = true
     }
 
     /// Rebuilds the zoom interpolator when segments or frame size change.
@@ -75,11 +80,13 @@ final class MetalPreviewRenderer: NSObject {
         zoomInterpolator = segments.isEmpty
             ? nil
             : ZoomInterpolator(segments: segments, frameSize: frameSize)
+        needsRecomposite = true
     }
 
     /// Replaces the cursor timeline used to composite cursor overlays.
     func updateCursorTimeline(_ timeline: SmoothedCursorTimeline?) {
         cursorTimeline = timeline
+        needsRecomposite = true
     }
 
     // MARK: - Frame rendering
@@ -98,24 +105,30 @@ final class MetalPreviewRenderer: NSObject {
 
         // 2. Pull a fresh CVPixelBuffer from the video output, if one is available.
         let currentTime = player.currentTime()
-        var frameImage: CIImage
+        var rawFrame: CIImage?
 
         if videoOutput.hasNewPixelBuffer(forItemTime: currentTime),
            let pixelBuffer = videoOutput.copyPixelBuffer(forItemTime: currentTime, itemTimeForDisplay: nil) {
-            let raw = CIImage(cvPixelBuffer: pixelBuffer)
+            rawFrame = CIImage(cvPixelBuffer: pixelBuffer)
+            lastRawFrame = rawFrame
+            needsRecomposite = true // new frame always needs compositing
+        } else if needsRecomposite {
+            // Settings changed while paused — re-composite from cached raw frame
+            rawFrame = lastRawFrame
+        }
 
-            // 3. Composite via FrameCompositor when we have one.
+        let frameImage: CIImage
+        if let raw = rawFrame {
+            // Composite via FrameCompositor
             if let comp = compositor {
                 let time = currentTime.seconds
 
-                // Cursor position at this instant.
                 var cursorPos: CGPoint? = nil
                 if let timeline = cursorTimeline {
                     let pos = timeline.position(at: time)
                     cursorPos = CGPoint(x: pos.x, y: pos.y)
                 }
 
-                // Zoom transform.
                 let zoomTransform: FrameTransform
                 if let interp = zoomInterpolator {
                     let cursorTuple = cursorPos.map { (x: Double($0.x), y: Double($0.y)) }
@@ -128,18 +141,19 @@ final class MetalPreviewRenderer: NSObject {
                     frame: raw,
                     zoomTransform: zoomTransform,
                     cursorPosition: cursorPos,
-                    cursorImage: nil   // cursor image overlay not implemented in preview
+                    cursorImage: nil
                 )
             } else {
                 frameImage = raw
             }
 
-            lastFrameImage = frameImage
-        } else if let cached = lastFrameImage {
-            // Paused or no new buffer — reuse last composited frame so we don't go black.
+            lastCompositedFrame = frameImage
+            needsRecomposite = false
+        } else if let cached = lastCompositedFrame {
+            // Nothing changed — reuse last composited frame
             frameImage = cached
         } else {
-            // Nothing to show yet.
+            // Nothing to show yet
             commandBuffer.commit()
             return
         }
