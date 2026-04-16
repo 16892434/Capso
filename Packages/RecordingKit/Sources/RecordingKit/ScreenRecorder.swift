@@ -158,18 +158,10 @@ public final class ScreenRecorder {
             throw RecordingError.noMatchingDisplay
         }
 
-        // Exclude all Capso windows (border, controls toolbar, click highlights,
-        // camera PiP, countdown) so they don't appear in the recorded video.
-        // Match by process ID — more reliable than bundleIdentifier in debug builds.
-        let ownPID = ProcessInfo.processInfo.processIdentifier
-        let ownApps = content.applications.filter { $0.processID == ownPID }
-        let filter: SCContentFilter
-        if !ownApps.isEmpty {
-            filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
-        } else {
-            // Fallback: no exclusion if we can't find ourselves
-            filter = SCContentFilter(display: display, excludingWindows: [])
-        }
+        // Window exclusion is handled per-window via sharingType = .none
+        // (set on RecordingBorderWindow, RecordingControlsWindow, CountdownWindow,
+        // ClickHighlightWindow). ScreenCaptureKit respects this on macOS 14.2+.
+        let filter = SCContentFilter(display: display, excludingWindows: [])
         let sc = SCStreamConfiguration()
 
         sc.width = dims.w

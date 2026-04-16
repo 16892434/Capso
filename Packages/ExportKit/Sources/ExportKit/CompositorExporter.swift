@@ -8,11 +8,9 @@ import SharedKit
 
 /// Exports a recording with visual effects (background, zoom) baked in.
 ///
-/// Uses `AVAssetExportSession` with a `AVMutableVideoComposition` that applies
-/// CIFilter-based compositing per frame. This is Apple's recommended approach
-/// for applying Core Image effects during export — it handles audio passthrough,
-/// frame timing, and encoding automatically. Much more reliable than manual
-/// AVAssetReader/Writer pipelines.
+/// Uses `AVMutableVideoComposition` with a CIFilter handler for per-frame
+/// compositing via `FrameCompositor`. Audio is passed through automatically
+/// by `AVAssetExportSession`.
 public enum CompositorExporter {
 
     public static func export(
@@ -35,7 +33,6 @@ public enum CompositorExporter {
         let nominalFPS = try await videoTrack.load(.nominalFrameRate)
         let fps = nominalFPS > 0 ? nominalFPS : 30.0
 
-        // Set up compositor
         let compositor = FrameCompositor(
             sourceSize: naturalSize,
             backgroundStyle: project.backgroundStyle,
@@ -44,45 +41,53 @@ public enum CompositorExporter {
         let outSize = compositor.outputSize
         let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-        // Trim regions for time remapping
-        let sortedTrims = project.trimRegions.sorted { $0.startTime < $1.startTime }
-
-        // Create a video composition that applies effects per frame
-        let videoComposition = AVMutableVideoComposition(asset: asset) { request in
-            let sourceImage = request.sourceImage.clampedToExtent()
-            let timeSec = request.compositionTime.seconds
-
-            // Compute zoom transform
-            let cursorPos = cursorTimeline?.position(at: timeSec)
-            let zoomTransform: FrameTransform
-            if let interp = zoomInterpolator {
-                let cp = cursorPos.map { (x: $0.x, y: $0.y) }
-                zoomTransform = interp.transform(at: timeSec, cursorPosition: cp)
-            } else {
-                zoomTransform = .identity
-            }
-
-            // Composite the frame
-            let cgCursorPos = cursorPos.map { CGPoint(x: $0.x, y: $0.y) }
-            let composited = compositor.compose(
-                frame: sourceImage.cropped(to: CGRect(origin: .zero, size: naturalSize)),
-                zoomTransform: zoomTransform,
-                cursorPosition: cgCursorPos,
-                cursorImage: nil
-            )
-
-            // Ensure output matches expected size
-            let outputRect = CGRect(origin: .zero, size: outSize)
-            let finalImage = composited.cropped(to: outputRect)
-
-            request.finish(with: finalImage, context: ciContext)
-        }
-
-        // Set output size and frame rate
+        // Build the video composition with per-frame CIFilter handler
+        let videoComposition = AVMutableVideoComposition()
         videoComposition.renderSize = outSize
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
 
-        // Choose export preset
+        // Use the customVideoCompositorClass approach is complex; instead use
+        // the simpler CIFilter handler. But we must create it properly.
+        let filterComposition = try await AVMutableVideoComposition.videoComposition(
+            with: asset,
+            applyingCIFiltersWithHandler: { request in
+                let sourceImage = request.sourceImage
+                let timeSec = request.compositionTime.seconds
+                let sourceRect = CGRect(origin: .zero, size: naturalSize)
+
+                // Compute zoom
+                let cursorPos = cursorTimeline?.position(at: timeSec)
+                let zoomTransform: FrameTransform
+                if let interp = zoomInterpolator {
+                    let cp = cursorPos.map { (x: $0.x, y: $0.y) }
+                    zoomTransform = interp.transform(at: timeSec, cursorPosition: cp)
+                } else {
+                    zoomTransform = .identity
+                }
+
+                // Composite
+                let cgCursorPos = cursorPos.map { CGPoint(x: $0.x, y: $0.y) }
+                let composited = compositor.compose(
+                    frame: sourceImage.cropped(to: sourceRect),
+                    zoomTransform: zoomTransform,
+                    cursorPosition: cgCursorPos,
+                    cursorImage: nil
+                )
+
+                // Ensure output extent starts at origin and matches renderSize
+                let outputRect = CGRect(origin: .zero, size: outSize)
+                let finalImage = composited.cropped(to: outputRect)
+
+                request.finish(with: finalImage, context: ciContext)
+            }
+        )
+
+        // Override renderSize and frameDuration on the composition returned by
+        // the convenience initializer (it defaults to naturalSize)
+        filterComposition.renderSize = outSize
+        filterComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+
+        // Export preset
         let presetName = switch quality {
         case .maximum: AVAssetExportPresetHighestQuality
         case .social: AVAssetExportPreset1920x1080
@@ -93,10 +98,11 @@ public enum CompositorExporter {
             throw ExportError.exportSessionFailed("Could not create export session")
         }
 
-        session.videoComposition = videoComposition
+        session.videoComposition = filterComposition
         session.shouldOptimizeForNetworkUse = true
 
-        // Apply trim as time range if present
+        // Apply trim
+        let sortedTrims = project.trimRegions.sorted { $0.startTime < $1.startTime }
         let effectiveStart = sortedTrims.filter { $0.startTime < 0.01 }.map(\.endTime).max() ?? 0
         let duration = try await asset.load(.duration).seconds
         let effectiveEnd = sortedTrims.filter { $0.endTime >= duration - 0.01 }.map(\.startTime).min() ?? duration
@@ -107,10 +113,8 @@ public enum CompositorExporter {
             session.timeRange = CMTimeRange(start: cmStart, duration: cmDuration)
         }
 
-        // Remove existing file
         try? FileManager.default.removeItem(at: destination)
 
-        // Export
         do {
             try await session.export(to: destination, as: .mp4)
         } catch is CancellationError {

@@ -17,6 +17,8 @@ final class RecordingBorderWindow: NSPanel {
         self.hasShadow = false
         self.ignoresMouseEvents = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Prevent ScreenCaptureKit from capturing this window (macOS 14.2+)
+        self.sharingType = .none
 
         let borderView = RecordingBorderView(frame: NSRect(origin: .zero, size: frame.size))
         self.contentView = borderView
