@@ -176,8 +176,8 @@ final class EditorCoordinator {
     var hasCompositingEffects: Bool {
         project.backgroundStyle.enabled ||
         !project.zoomSegments.isEmpty ||
-        !project.trimRegions.isEmpty ||
-        project.cursorSmoothing.enabled
+        !project.trimRegions.isEmpty
+        // Note: cursorSmoothing excluded — cursor overlay rendering not yet implemented
     }
 
     func exportVideo(format: ExportFormat, quality: ExportQuality, destination: URL) async throws -> URL {
