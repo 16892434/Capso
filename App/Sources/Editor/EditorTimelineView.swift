@@ -55,6 +55,8 @@ struct EditorTimelineView: View {
             }
             .frame(height: 40)
 
+            ZoomTrackView(coordinator: coordinator)
+
             timeMarkers
         }
     }
