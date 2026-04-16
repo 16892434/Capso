@@ -170,8 +170,6 @@ public enum CompositorExporter {
         // MARK: Video frame loop
 
         let trimRegions = project.trimRegions
-        // Sort trim regions by start time for efficient offset calculation
-        let sortedTrims = trimRegions.sorted { $0.startTime < $1.startTime }
 
         while let sampleBuffer = videoOutput.copyNextSampleBuffer() {
             let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -241,10 +239,7 @@ public enum CompositorExporter {
 
             ciContext.render(composited, to: outputBuffer)
 
-            // Remap PTS: subtract accumulated trimmed time so there are no gaps
-            let adjustedTime = remapTime(timeSec, sortedTrims: sortedTrims)
-            let adjustedPTS = CMTime(seconds: adjustedTime, preferredTimescale: presentationTime.timescale)
-            adaptor.append(outputBuffer, withPresentationTime: adjustedPTS)
+            adaptor.append(outputBuffer, withPresentationTime: presentationTime)
         }
 
         // MARK: Audio passthrough loop
@@ -262,16 +257,7 @@ public enum CompositorExporter {
                     try await Task.sleep(for: .milliseconds(10))
                 }
 
-                // Remap audio PTS to match video timeline (no gaps from trims)
-                let adjustedTime = remapTime(timeSec, sortedTrims: sortedTrims)
-                let adjustedPTS = CMTime(seconds: adjustedTime, preferredTimescale: presentationTime.timescale)
-
-                // Create a new sample buffer with the adjusted timestamp
-                if let remapped = Self.remapSampleBuffer(sampleBuffer, to: adjustedPTS) {
-                    audioInput.append(remapped)
-                } else {
-                    audioInput.append(sampleBuffer)
-                }
+                audioInput.append(sampleBuffer)
             }
             audioInput.markAsFinished()
         }
@@ -307,44 +293,6 @@ public enum CompositorExporter {
             }
         }
         return false
-    }
-
-    /// Remap a source timestamp to the output timeline by subtracting
-    /// the total duration of all trim regions that come before this time.
-    /// This eliminates gaps (black frames) where trimmed content was removed.
-    private static func remapTime(_ time: TimeInterval, sortedTrims: [TrimRegion]) -> TimeInterval {
-        var offset: TimeInterval = 0
-        for trim in sortedTrims {
-            if trim.endTime <= time {
-                // This entire trim region is before our time — subtract its full duration
-                offset += trim.endTime - trim.startTime
-            } else if trim.startTime < time {
-                // We're partially past this trim region
-                offset += time - trim.startTime
-            }
-        }
-        return max(0, time - offset)
-    }
-
-    /// Create a copy of a CMSampleBuffer with a new presentation timestamp.
-    /// Used to remap audio sample timestamps after trimming.
-    private static func remapSampleBuffer(_ buffer: CMSampleBuffer, to newPTS: CMTime) -> CMSampleBuffer? {
-        var timingInfo = CMSampleTimingInfo(
-            duration: CMSampleBufferGetDuration(buffer),
-            presentationTimeStamp: newPTS,
-            decodeTimeStamp: .invalid
-        )
-        var newBuffer: CMSampleBuffer?
-        var count: CMItemCount = 0
-        CMSampleBufferGetSampleTimingInfoArray(buffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
-        let status = CMSampleBufferCreateCopyWithNewTiming(
-            allocator: nil,
-            sampleBuffer: buffer,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timingInfo,
-            sampleBufferOut: &newBuffer
-        )
-        return status == noErr ? newBuffer : nil
     }
 
     /// Computes an H.264 target bitrate in bits/second, scaling by resolution and frame rate.
