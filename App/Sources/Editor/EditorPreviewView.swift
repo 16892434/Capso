@@ -99,6 +99,12 @@ private struct PlayerView: NSViewRepresentable {
         view.controlsStyle = .none
         view.showsFullScreenToggleButton = false
         view.allowsPictureInPicturePlayback = false
+        // Make background transparent so the selected background color/effect shows
+        // through instead of the default black letterbox bars.
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        // Also set the video gravity to resize-aspect-fill to avoid letterboxing
+        view.videoGravity = .resizeAspectFill
         return view
     }
 
