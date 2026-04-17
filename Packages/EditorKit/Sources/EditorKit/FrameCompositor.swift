@@ -96,10 +96,11 @@ public final class FrameCompositor: Sendable {
         let h = sourceSize.height
         let s = CGFloat(transform.scale)
 
-        // translateX/Y carry the normalized focus point (0-1).
-        // Convert to pixel coordinates.
+        // translateX/Y carry the normalized focus point (0-1) in screen coordinates
+        // (top-left origin: x=0 left, y=0 top).
+        // CIImage uses bottom-left origin, so flip Y.
         let focusX = CGFloat(transform.translateX) * w
-        let focusY = CGFloat(transform.translateY) * h
+        let focusY = (1.0 - CGFloat(transform.translateY)) * h
         let centerX = w / 2.0
         let centerY = h / 2.0
 
