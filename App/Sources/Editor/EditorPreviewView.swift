@@ -51,7 +51,9 @@ struct EditorPreviewView: View {
             backgroundStyle: EditorKit.BackgroundStyle(enabled: false), // zoom only
             zoomSegments: coordinator.project.zoomSegments,
             videoSize: coordinator.project.videoSize,
-            cursorTimeline: coordinator.cursorTimeline
+            cursorTimeline: coordinator.cursorTimeline,
+            cursorCIImage: coordinator.cursorCIImage,
+            cursorOverlayProvider: coordinator.cursorOverlayProvider
         )
     }
 
@@ -95,7 +97,9 @@ struct EditorPreviewView: View {
                 backgroundStyle: EditorKit.BackgroundStyle(enabled: false),
                 zoomSegments: [],
                 videoSize: coordinator.project.videoSize,
-                cursorTimeline: nil
+                cursorTimeline: nil,
+                cursorCIImage: nil,
+                cursorOverlayProvider: nil
             )
             .scaleEffect(1.15)
             .blur(radius: 40)

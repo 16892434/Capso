@@ -18,6 +18,8 @@ public enum CompositorExporter {
         project: RecordingProject,
         cursorTimeline: SmoothedCursorTimeline?,
         zoomInterpolator: ZoomInterpolator?,
+        cursorImage: CIImage? = nil,
+        cursorOverlayProvider: CursorOverlayProvider? = nil,
         destination: URL,
         quality: ExportQuality,
         progress: (@Sendable (Double) -> Void)? = nil
@@ -65,13 +67,25 @@ public enum CompositorExporter {
                     zoomTransform = .identity
                 }
 
+                // Compute click-scaled cursor image
+                var scaledCursor: CIImage? = nil
+                if let cursorImg = cursorImage {
+                    let clickScale = cursorOverlayProvider?.clickScale(at: timeSec) ?? 1.0
+                    if clickScale < 1.0 {
+                        let cs = CGFloat(clickScale)
+                        scaledCursor = cursorImg.transformed(by: CGAffineTransform(scaleX: cs, y: cs))
+                    } else {
+                        scaledCursor = cursorImg
+                    }
+                }
+
                 // Composite
                 let cgCursorPos = cursorPos.map { CGPoint(x: $0.x, y: $0.y) }
                 let composited = compositor.compose(
                     frame: sourceImage.cropped(to: sourceRect),
                     zoomTransform: zoomTransform,
                     cursorPosition: cgCursorPos,
-                    cursorImage: nil
+                    cursorImage: scaledCursor
                 )
 
                 // Ensure output extent starts at origin and matches renderSize

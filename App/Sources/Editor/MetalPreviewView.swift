@@ -20,6 +20,8 @@ struct MetalPreviewView: NSViewRepresentable {
     let zoomSegments: [ZoomSegment]
     let videoSize: CGSize
     let cursorTimeline: SmoothedCursorTimeline?
+    let cursorCIImage: CIImage?
+    let cursorOverlayProvider: CursorOverlayProvider?
 
     // MARK: - Coordinator
 
@@ -66,6 +68,7 @@ struct MetalPreviewView: NSViewRepresentable {
             renderer.updateCompositor(sourceSize: videoSize, backgroundStyle: backgroundStyle)
             renderer.updateZoom(segments: zoomSegments, frameSize: videoSize)
             renderer.updateCursorTimeline(cursorTimeline)
+            renderer.updateCursor(image: cursorCIImage, provider: cursorOverlayProvider)
             view.device = MTLCreateSystemDefaultDevice()
             view.delegate = renderer
             context.coordinator.renderer = renderer
@@ -79,5 +82,6 @@ struct MetalPreviewView: NSViewRepresentable {
         renderer.updateCompositor(sourceSize: videoSize, backgroundStyle: backgroundStyle)
         renderer.updateZoom(segments: zoomSegments, frameSize: videoSize)
         renderer.updateCursorTimeline(cursorTimeline)
+        renderer.updateCursor(image: cursorCIImage, provider: cursorOverlayProvider)
     }
 }

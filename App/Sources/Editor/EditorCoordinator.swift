@@ -244,6 +244,46 @@ final class EditorCoordinator {
         return _cursorTimeline
     }
 
+    // MARK: - Cursor Overlay
+
+    private var _cursorCIImage: CIImage?
+    private var _cursorImageLoaded = false
+
+    var cursorCIImage: CIImage? {
+        if !_cursorImageLoaded {
+            _cursorImageLoaded = true
+            _cursorCIImage = loadSystemCursorImage()
+        }
+        return _cursorCIImage
+    }
+
+    private var _cursorOverlayProvider: CursorOverlayProvider?
+    private var _cursorOverlayProviderBuilt = false
+
+    var cursorOverlayProvider: CursorOverlayProvider? {
+        if !_cursorOverlayProviderBuilt {
+            _cursorOverlayProviderBuilt = true
+            if let url = project.cursorTelemetryURL,
+               let data = try? CursorTelemetry.load(from: url) {
+                let clicks = data.events.filter { $0.type == .leftClick || $0.type == .rightClick }
+                _cursorOverlayProvider = CursorOverlayProvider(clickEvents: clicks)
+            }
+        }
+        return _cursorOverlayProvider
+    }
+
+    private func loadSystemCursorImage() -> CIImage? {
+        let nsImage = NSCursor.arrow.image
+        guard let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        // Scale cursor to ~3.5% of video height so it's visible
+        let targetHeight = project.videoSize.height * 0.035
+        guard CGFloat(cgImage.height) > 0 else { return nil }
+        let s = targetHeight / CGFloat(cgImage.height)
+        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(scaleX: s, y: s))
+    }
+
     // MARK: - Export
 
     /// Use CompositorExporter when visual effects need to be baked into the export.
@@ -315,6 +355,8 @@ final class EditorCoordinator {
             project: project,
             cursorTimeline: cursorTimeline,
             zoomInterpolator: zoomInterpolator,
+            cursorImage: cursorCIImage,
+            cursorOverlayProvider: cursorOverlayProvider,
             destination: destination,
             quality: quality
         ) { [weak self] progress in

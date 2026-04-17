@@ -33,6 +33,8 @@ final class MetalPreviewRenderer: NSObject {
     private var compositor: FrameCompositor?
     private var zoomInterpolator: ZoomInterpolator?
     private var cursorTimeline: SmoothedCursorTimeline?
+    private var cursorCIImage: CIImage?
+    private var cursorOverlayProvider: CursorOverlayProvider?
 
     /// Last raw (unprocessed) frame — kept so we can re-composite when settings change while paused.
     private var lastRawFrame: CIImage?
@@ -89,6 +91,13 @@ final class MetalPreviewRenderer: NSObject {
         needsRecomposite = true
     }
 
+    /// Updates the cursor image and click-shrink provider used for cursor rendering.
+    func updateCursor(image: CIImage?, provider: CursorOverlayProvider?) {
+        self.cursorCIImage = image
+        self.cursorOverlayProvider = provider
+        needsRecomposite = true
+    }
+
     // MARK: - Frame rendering
 
     /// Core rendering work — pulls a pixel buffer, composites it, and blits it to the drawable.
@@ -137,11 +146,23 @@ final class MetalPreviewRenderer: NSObject {
                     zoomTransform = .identity
                 }
 
+                // Compute click-scaled cursor image
+                var scaledCursor: CIImage? = nil
+                if let cursorImg = cursorCIImage {
+                    let clickScale = cursorOverlayProvider?.clickScale(at: time) ?? 1.0
+                    if clickScale < 1.0 {
+                        let cs = CGFloat(clickScale)
+                        scaledCursor = cursorImg.transformed(by: CGAffineTransform(scaleX: cs, y: cs))
+                    } else {
+                        scaledCursor = cursorImg
+                    }
+                }
+
                 frameImage = comp.compose(
                     frame: raw,
                     zoomTransform: zoomTransform,
                     cursorPosition: cursorPos,
-                    cursorImage: nil
+                    cursorImage: scaledCursor
                 )
             } else {
                 frameImage = raw
