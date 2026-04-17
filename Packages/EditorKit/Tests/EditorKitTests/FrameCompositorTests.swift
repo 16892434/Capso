@@ -34,7 +34,8 @@ struct FrameCompositorTests {
             backgroundStyle: BackgroundStyle(enabled: false),
             outputScale: 1.0
         )
-        let zoom = FrameTransform(scale: 2.0, translateX: 0, translateY: 0)
+        // translateX/Y = focus point in normalized 0-1 coords; 0.5 = center
+        let zoom = FrameTransform(scale: 2.0, translateX: 0.5, translateY: 0.5)
         let result = compositor.compose(frame: source, zoomTransform: zoom, cursorPosition: nil, cursorImage: nil)
         #expect(result.extent.width == 1920)
         #expect(result.extent.height == 1080)

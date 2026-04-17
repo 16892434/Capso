@@ -60,14 +60,9 @@ public struct ZoomInterpolator: Sendable {
         // Apply edge snapping so the viewport never exceeds frame bounds
         let focus = edgeSnap(cursor: rawFocus, zoomLevel: effectiveZoom)
 
-        // Scale
-        let scale = effectiveZoom
-
-        // Translation: shift the frame so that `focus` appears at the viewport center
-        let translateX = (0.5 - focus.x) * (scale - 1.0) * frameWidth
-        let translateY = (0.5 - focus.y) * (scale - 1.0) * frameHeight
-
-        return FrameTransform(scale: scale, translateX: translateX, translateY: translateY)
+        // translateX/Y carry the normalized focus point (0-1) so the compositor
+        // can build the correct scale-around-focus affine transform.
+        return FrameTransform(scale: effectiveZoom, translateX: focus.x, translateY: focus.y)
     }
 
     // MARK: - Internal Helpers

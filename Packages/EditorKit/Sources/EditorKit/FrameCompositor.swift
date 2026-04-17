@@ -95,18 +95,24 @@ public final class FrameCompositor: Sendable {
         let w = sourceSize.width
         let h = sourceSize.height
         let s = CGFloat(transform.scale)
-        let tx = CGFloat(transform.translateX)
-        let ty = CGFloat(transform.translateY)
 
-        // Build an affine transform that scales around the frame centre then translates.
+        // translateX/Y carry the normalized focus point (0-1).
+        // Convert to pixel coordinates.
+        let focusX = CGFloat(transform.translateX) * w
+        let focusY = CGFloat(transform.translateY) * h
         let centerX = w / 2.0
         let centerY = h / 2.0
 
+        // Scale around the focus point, then translate so focus appears at viewport center.
+        // For point (px, py):
+        //   1. (px - focusX, py - focusY)
+        //   2. ((px - focusX) * s, (py - focusY) * s)
+        //   3. ((px - focusX) * s + centerX, (py - focusY) * s + centerY)
+        // → focus point (focusX, focusY) maps to (centerX, centerY) ✓
         let affine = CGAffineTransform.identity
             .translatedBy(x: centerX, y: centerY)
             .scaledBy(x: s, y: s)
-            .translatedBy(x: -centerX, y: -centerY)
-            .translatedBy(x: tx, y: ty)
+            .translatedBy(x: -focusX, y: -focusY)
 
         let zoomed = image.transformed(by: affine)
 
