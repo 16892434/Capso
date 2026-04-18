@@ -18,16 +18,31 @@ public enum AutoZoomDetector {
 
     // MARK: - Tuning constants
 
+    /// Minimum stillness required to count as a dwell.
     static let minDwellDuration: TimeInterval = 0.45
-    static let maxDwellDuration: TimeInterval = 2.60
+    /// Max normalized distance between consecutive telemetry events for them
+    /// to still count as part of the same stillness run.
     static let dwellMoveThreshold: Double = 0.02
+    /// Minimum gap between accepted candidates' center times. Prevents suggestions
+    /// from clumping.
     static let minSpacing: TimeInterval = 1.80
+    /// Merge two adjacent segments if the gap between them is ≤ this.
     static let mergeGap: TimeInterval = 1.50
+    /// Zoom-in starts this far before a click (so it settles on the click).
     static let clickPreRoll: TimeInterval = 1.0
+    /// Time spent zoomed after a click (shows the result).
     static let clickPostRoll: TimeInterval = 2.0
+    /// Padding each side of a dwell run when computing segment length.
     static let dwellBuffer: TimeInterval = 0.5
     static let defaultZoomLevel: Double = 1.5
     static let defaultDuration: TimeInterval = 3.0
+    /// Cap on the duration of any single auto-generated segment.
+    /// Cursor telemetry is captured via CGEventTap which only fires on actual
+    /// mouse movement — stillness produces NO events — so a natural "user is
+    /// reading" pause looks like one long dwell run. Without this cap, a 20s
+    /// reading pause would produce a 20s zoom. Merged segments may still
+    /// exceed this length.
+    static let maxSegmentDuration: TimeInterval = 5.0
 
     // MARK: - Candidate model (internal)
 
@@ -85,25 +100,28 @@ public enum AutoZoomDetector {
     }
 
     private static func buildDwellCandidates(from events: [CursorEvent]) -> [Candidate] {
-        // A dwell run is a maximal contiguous span of events (of any type) where
-        // every consecutive pair has normalized distance < dwellMoveThreshold.
-        guard !events.isEmpty else { return [] }
+        // Dwell detection looks only at movement samples. Clicks are discrete
+        // events that happen to carry a position, and if we included them we'd
+        // treat two distant-in-time clicks at the same position as one very
+        // long "dwell" spanning the gap.
+        let moves = events.filter { $0.type == .move }
+        guard !moves.isEmpty else { return [] }
         var out: [Candidate] = []
 
         var runStart = 0
-        for i in 1..<events.count {
-            let dx = events[i].x - events[i - 1].x
-            let dy = events[i].y - events[i - 1].y
+        for i in 1..<moves.count {
+            let dx = moves[i].x - moves[i - 1].x
+            let dy = moves[i].y - moves[i - 1].y
             let dist = (dx * dx + dy * dy).squareRoot()
             if dist >= dwellMoveThreshold {
-                if let c = candidateFromRun(events: events, startIdx: runStart, endIdx: i - 1) {
+                if let c = candidateFromRun(events: moves, startIdx: runStart, endIdx: i - 1) {
                     out.append(c)
                 }
                 runStart = i
             }
         }
         // Final run
-        if let c = candidateFromRun(events: events, startIdx: runStart, endIdx: events.count - 1) {
+        if let c = candidateFromRun(events: moves, startIdx: runStart, endIdx: moves.count - 1) {
             out.append(c)
         }
         return out
@@ -118,9 +136,7 @@ public enum AutoZoomDetector {
         let runStart = events[startIdx].timestamp
         let runEnd = events[endIdx].timestamp
         let runDuration = runEnd - runStart
-        guard runDuration >= minDwellDuration, runDuration <= maxDwellDuration else {
-            return nil
-        }
+        guard runDuration >= minDwellDuration else { return nil }
 
         var sumX = 0.0, sumY = 0.0
         for idx in startIdx...endIdx {
@@ -173,7 +189,10 @@ public enum AutoZoomDetector {
             rawStart = candidate.centerTime - clickPreRoll
             rawEnd = candidate.centerTime + clickPostRoll
         case .dwell(let dwellDuration):
-            let desired = max(defaultDuration, dwellDuration + 2 * dwellBuffer)
+            // Cap at maxSegmentDuration so long reading pauses don't produce
+            // equally long zooms; the segment stays centered on the dwell midpoint.
+            let desired = min(maxSegmentDuration,
+                              max(defaultDuration, dwellDuration + 2 * dwellBuffer))
             let half = desired / 2.0
             rawStart = candidate.centerTime - half
             rawEnd = candidate.centerTime + half

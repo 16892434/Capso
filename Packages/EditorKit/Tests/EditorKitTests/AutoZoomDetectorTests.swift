@@ -147,14 +147,24 @@ struct AutoZoomDetectorTests {
         #expect(out.isEmpty)
     }
 
-    @Test("dwell longer than maxDwellDuration produces no segment")
-    func dwellTooLong() {
-        // 3s of stillness — above the 2.6s threshold.
+    @Test("long dwell produces a segment capped at maxSegmentDuration")
+    func dwellLongerThanCapIsCapped() {
+        // 8s of stillness from t=1 to t=9, midpoint=5.
+        // Without a cap this would produce a 9s segment [0.5, 9.5].
+        // With maxSegmentDuration=5, we expect a 5s segment centered on 5 → [2.5, 7.5].
         let out = AutoZoomDetector.detect(
-            events: dwell(from: 2.0, to: 5.0),
-            duration: 10
+            events: dwell(from: 1.0, to: 9.0, x: 0.4, y: 0.6),
+            duration: 12
         )
-        #expect(out.isEmpty)
+        #expect(out.count == 1)
+        #expect(out[0].startTime == 2.5)
+        #expect(out[0].endTime == 7.5)
+        if case .manual(let x, let y) = out[0].focusMode {
+            #expect(abs(x - 0.4) < 0.001)
+            #expect(abs(y - 0.6) < 0.001)
+        } else {
+            Issue.record("expected .manual focus mode")
+        }
     }
 
     // MARK: - Mixed / merge
