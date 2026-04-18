@@ -20,9 +20,6 @@ public enum AutoZoomDetector {
 
     /// Minimum stillness required to count as a dwell.
     static let minDwellDuration: TimeInterval = 0.45
-    /// Max normalized distance between consecutive telemetry events for them
-    /// to still count as part of the same stillness run.
-    static let dwellMoveThreshold: Double = 0.02
     /// Minimum gap between accepted candidates' center times. Prevents suggestions
     /// from clumping.
     static let minSpacing: TimeInterval = 1.80
@@ -100,60 +97,28 @@ public enum AutoZoomDetector {
     }
 
     private static func buildDwellCandidates(from events: [CursorEvent]) -> [Candidate] {
-        // Dwell detection looks only at movement samples. Clicks are discrete
-        // events that happen to carry a position, and if we included them we'd
-        // treat two distant-in-time clicks at the same position as one very
-        // long "dwell" spanning the gap.
+        // Dwell = a gap between consecutive move events whose length is
+        // >= minDwellDuration. CGEventTap fires when the cursor moves, not
+        // when it is still — so real stillness shows up as a silence in the
+        // event stream, not as a cluster of close-in-position samples.
+        // The cursor was sitting at `moves[i].position` during the gap, so
+        // we use that position as the focus.
         let moves = events.filter { $0.type == .move }
-        guard !moves.isEmpty else { return [] }
+        guard moves.count >= 2 else { return [] }
         var out: [Candidate] = []
 
-        var runStart = 0
-        for i in 1..<moves.count {
-            let dx = moves[i].x - moves[i - 1].x
-            let dy = moves[i].y - moves[i - 1].y
-            let dist = (dx * dx + dy * dy).squareRoot()
-            if dist >= dwellMoveThreshold {
-                if let c = candidateFromRun(events: moves, startIdx: runStart, endIdx: i - 1) {
-                    out.append(c)
-                }
-                runStart = i
-            }
-        }
-        // Final run
-        if let c = candidateFromRun(events: moves, startIdx: runStart, endIdx: moves.count - 1) {
-            out.append(c)
+        for i in 0..<(moves.count - 1) {
+            let gap = moves[i + 1].timestamp - moves[i].timestamp
+            guard gap >= minDwellDuration else { continue }
+            let centerTime = moves[i].timestamp + gap / 2.0
+            out.append(Candidate(
+                kind: .dwell(duration: gap),
+                centerTime: centerTime,
+                focus: (moves[i].x, moves[i].y),
+                strength: gap * 1000.0
+            ))
         }
         return out
-    }
-
-    private static func candidateFromRun(
-        events: [CursorEvent],
-        startIdx: Int,
-        endIdx: Int
-    ) -> Candidate? {
-        guard startIdx < endIdx else { return nil }
-        let runStart = events[startIdx].timestamp
-        let runEnd = events[endIdx].timestamp
-        let runDuration = runEnd - runStart
-        guard runDuration >= minDwellDuration else { return nil }
-
-        var sumX = 0.0, sumY = 0.0
-        for idx in startIdx...endIdx {
-            sumX += events[idx].x
-            sumY += events[idx].y
-        }
-        let count = Double(endIdx - startIdx + 1)
-        let avgX = sumX / count
-        let avgY = sumY / count
-        let centerTime = (runStart + runEnd) / 2.0
-
-        return Candidate(
-            kind: .dwell(duration: runDuration),
-            centerTime: centerTime,
-            focus: (avgX, avgY),
-            strength: runDuration * 1000.0
-        )
     }
 
     // MARK: - Step B: spacing filter
