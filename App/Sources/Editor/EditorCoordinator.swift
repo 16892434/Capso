@@ -210,12 +210,16 @@ final class EditorCoordinator {
             duration: duration
         )
 
-        project.zoomSegments.removeAll { $0.source == .auto }
-        project.zoomSegments.append(contentsOf: suggested)
-        project.zoomSegments.sort { $0.startTime < $1.startTime }
+        // Build the final segment list locally and assign once so `@Observable`
+        // fires a single notification — avoids intermediate-state diffs that
+        // would be visible to SwiftUI transitions on ZoomTrackView.
+        var updated = project.zoomSegments.filter { $0.source != .auto }
+        updated.append(contentsOf: suggested)
+        updated.sort { $0.startTime < $1.startTime }
+        project.zoomSegments = updated
 
         if let selID = selectedZoomSegmentID,
-           !project.zoomSegments.contains(where: { $0.id == selID }) {
+           !updated.contains(where: { $0.id == selID }) {
             selectedZoomSegmentID = nil
         }
 
