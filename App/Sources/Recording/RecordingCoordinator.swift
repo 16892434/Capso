@@ -319,6 +319,11 @@ final class RecordingCoordinator {
         currentMicEnabled = micEnabled
         currentSystemAudioEnabled = systemAudioEnabled
 
+        // Never bake the hardware cursor into the video. Phase 2 always records
+        // cursor telemetry, and the editor's CursorOverlayProvider renders the
+        // cursor from that telemetry (with spring smoothing). If we also let
+        // ScreenCaptureKit burn the cursor in, the output shows two cursors:
+        // the raw hardware one plus the smoothed overlay.
         let config = RecordingConfig(
             captureRect: selectedRect,
             displayID: selectedDisplayID,
@@ -326,7 +331,7 @@ final class RecordingCoordinator {
             fps: 30,
             captureSystemAudio: systemAudioEnabled,
             captureMicrophone: micEnabled,
-            showCursor: settings.showCursor
+            showCursor: false
         )
 
         // Start camera if not already running from toolbar preview.
