@@ -18,8 +18,13 @@ struct ZoomTrackView: View {
                     .padding(.leading, 4)
                     .allowsHitTesting(false)
 
-                ForEach(coordinator.project.zoomSegments) { segment in
+                ForEach(Array(coordinator.project.zoomSegments.enumerated()), id: \.element.id) { index, segment in
                     zoomSegmentView(segment, trackWidth: trackWidth)
+                        .transition(
+                            .opacity.animation(
+                                .easeOut(duration: 0.2).delay(Double(index) * 0.03)
+                            )
+                        )
                 }
             }
             .contentShape(Rectangle())
@@ -31,6 +36,7 @@ struct ZoomTrackView: View {
                 coordinator.selectedZoomSegmentID = nil
             }
         }
+        .animation(.default, value: coordinator.project.zoomSegments.map(\.id))
         .frame(height: 28)
     }
 
@@ -52,7 +58,7 @@ struct ZoomTrackView: View {
                 )
 
             HStack(spacing: 2) {
-                Image(systemName: "magnifyingglass")
+                Image(systemName: segment.source == .auto ? "wand.and.stars" : "magnifyingglass")
                     .font(.system(size: 8))
                 Text(String(format: "%.1fx", segment.zoomLevel))
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
