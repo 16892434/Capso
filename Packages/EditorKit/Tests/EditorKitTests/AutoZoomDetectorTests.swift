@@ -196,6 +196,28 @@ struct AutoZoomDetectorTests {
         }
     }
 
+    @Test("click and dwell merge with duration-weighted focus")
+    func clickAndDwellMerge() {
+        // Click at t=3 (x=0.2) → segment [2, 5]. Dwell [6.0, 7.0] (x=0.8, 1s
+        // duration, strength=1000) → segment [5.0, 8.0]. Center gap
+        // |6.5 - 3| = 3.5 ≥ minSpacing(1.8), both accepted. Segments touch
+        // exactly at t=5 (gap 0 ≤ mergeGap) → merge to [2, 8]. Both sub-
+        // segments have duration 3 → weighted focus = simple average.
+        let events =
+            dwell(from: 6.0, to: 7.0, x: 0.8, y: 0.8) +
+            [click(at: 3.0, x: 0.2, y: 0.2)]
+        let out = AutoZoomDetector.detect(events: events, duration: 12)
+        #expect(out.count == 1)
+        #expect(out[0].startTime == 2.0)
+        #expect(out[0].endTime == 8.0)
+        if case .manual(let x, let y) = out[0].focusMode {
+            #expect(abs(x - 0.5) < 0.001)
+            #expect(abs(y - 0.5) < 0.001)
+        } else {
+            Issue.record("expected .manual focus mode")
+        }
+    }
+
     @Test("two distant clicks do not merge")
     func distantClicksDontMerge() {
         let out = AutoZoomDetector.detect(

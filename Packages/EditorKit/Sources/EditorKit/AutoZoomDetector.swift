@@ -204,6 +204,9 @@ public enum AutoZoomDetector {
 
     // MARK: - Step D: merge overlapping
 
+    /// Merge segments whose gap is within `mergeGap` into a single segment whose
+    /// focus is a duration-weighted average. Runs pair-wise in time order, so
+    /// a chain A+B+C merges as (A+B) then +C — not a three-way centroid.
     private static func mergeOverlapping(segments: [ZoomSegment]) -> [ZoomSegment] {
         guard !segments.isEmpty else { return [] }
         var merged: [ZoomSegment] = [segments[0]]
