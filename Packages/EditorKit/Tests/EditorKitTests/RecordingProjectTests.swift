@@ -135,6 +135,31 @@ struct ZoomSegmentTests {
         let seg = ZoomSegment(startTime: 3.0, endTime: 9.0)
         #expect(seg.duration == 6.0)
     }
+
+    @Test("decodes legacy JSON without source key as .manual")
+    func legacyJSONDecodesAsManual() throws {
+        // JSON produced before Phase 2.1 — no `source` key.
+        let legacyJSON = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "startTime": 1.0,
+          "endTime": 4.0,
+          "zoomLevel": 1.5,
+          "focusMode": { "followCursor": {} }
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(ZoomSegment.self, from: legacyJSON)
+        #expect(decoded.source == .manual)
+        #expect(decoded.startTime == 1.0)
+        #expect(decoded.endTime == 4.0)
+    }
+
+    @Test("defaults to .manual source when not specified")
+    func defaultSourceIsManual() {
+        let seg = ZoomSegment(startTime: 0, endTime: 3)
+        #expect(seg.source == .manual)
+    }
 }
 
 // MARK: - BackgroundStyle Suite
