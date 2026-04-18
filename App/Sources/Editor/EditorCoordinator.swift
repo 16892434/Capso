@@ -188,6 +188,40 @@ final class EditorCoordinator {
         selectedZoomSegmentID = segment.id
     }
 
+    // MARK: - Auto-zoom
+
+    /// True when the project has cursor telemetry available for auto-detection.
+    var canAutoZoom: Bool {
+        project.cursorTelemetryURL != nil
+    }
+
+    /// Replace all `.auto` zoom segments with a fresh batch from AutoZoomDetector.
+    /// `.manual` segments (user-created) are preserved.
+    /// Returns the number of new `.auto` segments inserted.
+    @discardableResult
+    func autoZoom() -> Int {
+        guard let url = project.cursorTelemetryURL,
+              let data = try? CursorTelemetry.load(from: url) else {
+            return 0
+        }
+
+        let suggested = AutoZoomDetector.detect(
+            events: data.events,
+            duration: duration
+        )
+
+        project.zoomSegments.removeAll { $0.source == .auto }
+        project.zoomSegments.append(contentsOf: suggested)
+        project.zoomSegments.sort { $0.startTime < $1.startTime }
+
+        if let selID = selectedZoomSegmentID,
+           !project.zoomSegments.contains(where: { $0.id == selID }) {
+            selectedZoomSegmentID = nil
+        }
+
+        return suggested.count
+    }
+
     func removeZoomSegment(id: UUID) {
         project.zoomSegments.removeAll { $0.id == id }
         if selectedZoomSegmentID == id { selectedZoomSegmentID = nil }
