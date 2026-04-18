@@ -5,6 +5,14 @@ import SharedKit
 struct EditorSettingsPanel: View {
     @Bindable var coordinator: EditorCoordinator
 
+    @State private var lastAutoZoomRun: AutoZoomRunResult = .idle
+
+    private enum AutoZoomRunResult: Equatable {
+        case idle
+        case ranEmpty   // 0 segments — show inline "no moments" hint for a few seconds
+        case ranNonEmpty
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -194,6 +202,10 @@ struct EditorSettingsPanel: View {
             sectionLabel("Zoom")
 
             settingCard {
+                autoZoomRow
+
+                cardDivider
+
                 HStack {
                     Text("Segments")
                         .font(.system(size: 13))
@@ -254,6 +266,68 @@ struct EditorSettingsPanel: View {
                 }
             }
         }
+    }
+
+    private var autoZoomRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center) {
+                Text("Suggest zooms")
+                    .font(.system(size: 13))
+                Spacer()
+                autoZoomButton
+            }
+
+            Text(autoZoomSubtext)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .animation(.easeInOut(duration: 0.2), value: lastAutoZoomRun)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var autoZoomSubtext: String {
+        switch lastAutoZoomRun {
+        case .ranEmpty:
+            return "No clear moments detected — try recording with more clicks."
+        case .idle, .ranNonEmpty:
+            return "Analyzes clicks + pauses."
+        }
+    }
+
+    private var autoZoomButton: some View {
+        Button {
+            let count = coordinator.autoZoom()
+            lastAutoZoomRun = count > 0 ? .ranNonEmpty : .ranEmpty
+            if count == 0 {
+                // Auto-revert the "no moments" hint after 3s.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    if lastAutoZoomRun == .ranEmpty {
+                        lastAutoZoomRun = .idle
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 10))
+                Text("Detect")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(Color.purple.opacity(0.9))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.purple.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Color.purple.opacity(0.25), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!coordinator.canAutoZoom)
+        .opacity(coordinator.canAutoZoom ? 1.0 : 0.4)
     }
 
     private enum ZoomFocusTag {
