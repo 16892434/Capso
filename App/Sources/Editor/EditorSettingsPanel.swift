@@ -6,6 +6,7 @@ struct EditorSettingsPanel: View {
     @Bindable var coordinator: EditorCoordinator
 
     @State private var lastAutoZoomRun: AutoZoomRunResult = .idle
+    @State private var autoZoomRevertTask: Task<Void, Never>?
 
     private enum AutoZoomRunResult: Equatable {
         case idle
@@ -299,10 +300,11 @@ struct EditorSettingsPanel: View {
         Button {
             let count = coordinator.autoZoom()
             lastAutoZoomRun = count > 0 ? .ranNonEmpty : .ranEmpty
+            autoZoomRevertTask?.cancel()
             if count == 0 {
-                // Auto-revert the "no moments" hint after 3s.
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                autoZoomRevertTask = Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    guard !Task.isCancelled else { return }
                     if lastAutoZoomRun == .ranEmpty {
                         lastAutoZoomRun = .idle
                     }
