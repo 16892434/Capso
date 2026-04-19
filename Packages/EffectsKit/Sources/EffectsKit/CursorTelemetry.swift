@@ -25,6 +25,26 @@ public final class CursorTelemetry: @unchecked Sendable {
     private var runLoop: CFRunLoop?
     private var tapThread: Thread?
     private var watchdogTimer: DispatchSourceTimer?
+    private var receivedEventCount: Int = 0
+
+    // MARK: - Debug log file
+
+    private static let debugLogURL: URL = URL(fileURLWithPath: "/tmp/capso-telemetry.log")
+
+    private static func debugLog(_ message: String) {
+        let ts = Date().ISO8601Format()
+        let line = "[\(ts)] \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: debugLogURL.path) {
+            if let handle = try? FileHandle(forWritingTo: debugLogURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: debugLogURL)
+        }
+    }
 
     /// Opaque pointer produced by `Unmanaged.passRetained(self)` in `start()`.
     /// Stored here so both `stop()` and `deinit` can release it exactly once.
@@ -89,8 +109,14 @@ public final class CursorTelemetry: @unchecked Sendable {
     public func start() {
         guard eventTap == nil else { return }
 
+        // Reset the debug log at the start of each recording so the file
+        // reflects the current session.
+        try? FileManager.default.removeItem(at: Self.debugLogURL)
+        Self.debugLog("start() called; recordingRect=\(recordingRect)")
+
         // Record the reference time for relative timestamps.
         startTime = ProcessInfo.processInfo.systemUptime
+        receivedEventCount = 0
 
         let mask: CGEventMask =
             (1 << CGEventType.mouseMoved.rawValue)
@@ -119,7 +145,7 @@ public final class CursorTelemetry: @unchecked Sendable {
                 // Without this, a single timeout kills all capture for the
                 // rest of the recording.
                 if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                    NSLog("[CursorTelemetry] Tap disabled (type=%u), re-enabling", type.rawValue)
+                    CursorTelemetry.debugLog("CALLBACK: tap disabled (type=\(type.rawValue)); re-enabling")
                     if let t = telemetry.eventTap {
                         CGEvent.tapEnable(tap: t, enable: true)
                     }
@@ -127,6 +153,7 @@ public final class CursorTelemetry: @unchecked Sendable {
                 }
 
                 telemetry.handleCGEvent(type: type, event: event)
+                telemetry.receivedEventCount &+= 1
                 return Unmanaged.passUnretained(event)
             },
             userInfo: userInfo
@@ -164,17 +191,30 @@ public final class CursorTelemetry: @unchecked Sendable {
         // Block until the run loop is running and `runLoop` is set.
         readySemaphore.wait()
 
-        // Watchdog: periodically check the tap is still enabled and re-enable
-        // if macOS silently disabled it (in case the disable-notification
-        // didn't reach our callback, or was dropped).
+        Self.debugLog("tap created and enabled; bg thread running")
+
+        // Watchdog: periodically report the event count and check that the
+        // tap is still enabled; re-enable if macOS silently disabled it.
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        var lastCount = 0
         timer.setEventHandler { [weak self] in
-            guard let self, let t = self.eventTap else { return }
-            if !CGEvent.tapIsEnabled(tap: t) {
-                NSLog("[CursorTelemetry] Watchdog: tap was disabled, re-enabling")
-                CGEvent.tapEnable(tap: t, enable: true)
+            guard let self else { return }
+            let currentCount = self.receivedEventCount
+            let delta = currentCount - lastCount
+            lastCount = currentCount
+            let tapAlive: String
+            if let t = self.eventTap {
+                let enabled = CGEvent.tapIsEnabled(tap: t)
+                tapAlive = enabled ? "enabled" : "DISABLED"
+                if !enabled {
+                    CursorTelemetry.debugLog("WATCHDOG: tap disabled; re-enabling")
+                    CGEvent.tapEnable(tap: t, enable: true)
+                }
+            } else {
+                tapAlive = "tap=nil"
             }
+            CursorTelemetry.debugLog("heartbeat: events_total=\(currentCount) delta=\(delta) tap=\(tapAlive)")
         }
         timer.resume()
         watchdogTimer = timer
@@ -182,6 +222,7 @@ public final class CursorTelemetry: @unchecked Sendable {
 
     /// Stops the event tap and releases the retained self reference taken in `start()`.
     public func stop() {
+        Self.debugLog("stop() called; total events received=\(receivedEventCount)")
         watchdogTimer?.cancel()
         watchdogTimer = nil
         if let tap = eventTap {
