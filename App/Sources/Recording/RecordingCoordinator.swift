@@ -319,11 +319,9 @@ final class RecordingCoordinator {
         currentMicEnabled = micEnabled
         currentSystemAudioEnabled = systemAudioEnabled
 
-        // Never bake the hardware cursor into the video. Phase 2 always records
-        // cursor telemetry, and the editor's CursorOverlayProvider renders the
-        // cursor from that telemetry (with spring smoothing). If we also let
-        // ScreenCaptureKit burn the cursor in, the output shows two cursors:
-        // the raw hardware one plus the smoothed overlay.
+        // Editor flow renders the cursor from telemetry, so avoid baking the
+        // hardware cursor into the source video in that path. The quick-preview
+        // flow still keeps the native hardware cursor in the captured file.
         let config = RecordingConfig(
             captureRect: selectedRect,
             displayID: selectedDisplayID,
@@ -331,7 +329,7 @@ final class RecordingCoordinator {
             fps: 30,
             captureSystemAudio: systemAudioEnabled,
             captureMicrophone: micEnabled,
-            showCursor: false
+            showCursor: settings.openEditorAfterRecording ? false : settings.showCursor
         )
 
         // Start camera if not already running from toolbar preview.
@@ -392,7 +390,11 @@ final class RecordingCoordinator {
 
                 if settings.openEditorAfterRecording {
                     // Open the full recording editor (trim, zoom, export)
-                    openEditor(tempURL: tempURL, cursorTelemetryURL: cursorTelemetryURL)
+                    openEditor(
+                        tempURL: tempURL,
+                        cursorTelemetryURL: cursorTelemetryURL,
+                        showsCursor: settings.showCursor
+                    )
                 } else {
                     // Quick-preview flow: show thumbnail preview with Save/Copy/Discard
                     let thumbnail = await VideoThumbnail.extractThumbnail(from: tempURL)
@@ -518,7 +520,7 @@ final class RecordingCoordinator {
         alert.runModal()
     }
 
-    func openEditor(tempURL: URL, cursorTelemetryURL: URL?) {
+    func openEditor(tempURL: URL, cursorTelemetryURL: URL?, showsCursor: Bool) {
         Task {
             let asset = AVURLAsset(url: tempURL)
             let duration = (try? await asset.load(.duration).seconds) ?? 0
@@ -528,6 +530,7 @@ final class RecordingCoordinator {
             let project = RecordingProject(
                 sourceVideoURL: tempURL,
                 cursorTelemetryURL: cursorTelemetryURL,
+                showsCursor: showsCursor,
                 videoDuration: duration,
                 videoSize: naturalSize,
                 recordingAreaSize: CGSize(
@@ -690,6 +693,16 @@ final class RecordingCoordinator {
     }
 
     private func startCursorTelemetry() {
+        // CursorTelemetry normalizes CGEvent positions, which are in global
+        // TOP-LEFT origin. `selectedRect` is in display-local top-left origin
+        // (see handleAreaSelected), so the correct global-top-left origin of
+        // the recording rect is `CGDisplayBounds(displayID).origin + selectedRect.origin`.
+        //
+        // Do NOT use NSScreen.frame here — that is in AppKit BOTTOM-LEFT origin
+        // and would require flipping CGEvent positions to match, which is what
+        // downstream code does NOT do. Using the bottom-left rect against a
+        // top-left event position produces an overlay cursor drawn at the
+        // wrong on-screen location.
         let displayBounds = CGDisplayBounds(selectedDisplayID)
         let globalRect = CGRect(
             x: displayBounds.origin.x + selectedRect.origin.x,
