@@ -43,7 +43,7 @@ struct EditorPreviewView: View {
         } else {
             metalPreview
                 .aspectRatio(videoAspectRatio, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
     }
 
@@ -64,10 +64,10 @@ struct EditorPreviewView: View {
     private var previewWithBackground: some View {
         ZStack {
             backgroundFill
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             metalPreview
-                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius))
+                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
                 .shadow(
                     color: bg.shadowEnabled
                         ? .black.opacity(bg.shadowOpacity)

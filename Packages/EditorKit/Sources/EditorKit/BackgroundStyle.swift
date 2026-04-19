@@ -31,7 +31,7 @@ public struct CodableColor: Codable, Sendable, Equatable {
 
 /// Describes the decorative background rendered behind the video in the editor output.
 public struct BackgroundStyle: Codable, Sendable, Equatable {
-    public static let maxCornerRadius: Double = 120.0
+    public static let maxCornerRadius: Double = 24.0
 
     /// When `false`, the video is rendered without any background decoration.
     public var enabled: Bool
@@ -78,8 +78,8 @@ public struct BackgroundStyle: Codable, Sendable, Equatable {
     }
 
     public func clampedCornerRadius(for frameSize: CGSize) -> Double {
-        let maxAllowed = min(frameSize.width, frameSize.height) / 2
-        return min(max(0, cornerRadius), maxAllowed)
+        let geometricCap = min(frameSize.width, frameSize.height) / 2
+        return min(max(0, cornerRadius), min(Self.maxCornerRadius, geometricCap))
     }
 
     /// Default background style with sensible initial values.

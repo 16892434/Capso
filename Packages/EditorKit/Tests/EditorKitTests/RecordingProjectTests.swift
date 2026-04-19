@@ -274,10 +274,10 @@ struct BackgroundStyleTests {
         #expect(decoded.shadowEnabled == style.shadowEnabled)
     }
 
-    @Test("BackgroundStyle corner radius clamps to half the shorter side")
+    @Test("BackgroundStyle corner radius clamps to the editor max")
     func cornerRadiusClamp() {
         let style = BackgroundStyle(cornerRadius: 400)
-        #expect(style.clampedCornerRadius(for: CGSize(width: 300, height: 120)) == 60)
+        #expect(style.clampedCornerRadius(for: CGSize(width: 300, height: 120)) == 24)
     }
 }
 
