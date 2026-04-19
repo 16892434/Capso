@@ -3,7 +3,8 @@ import EditorKit
 
 struct EditorTimelineView: View {
     @Bindable var coordinator: EditorCoordinator
-    @State private var isDraggingPlayhead = false
+    @State private var isScrubbingTimeline = false
+    @State private var shouldResumePlaybackAfterScrub = false
 
     var body: some View {
         VStack(spacing: 6) {
@@ -48,10 +49,7 @@ struct EditorTimelineView: View {
                     playhead(trackWidth: trackWidth)
                 }
                 .contentShape(Rectangle())
-                .onTapGesture { location in
-                    let time = xToTime(location.x, in: trackWidth)
-                    coordinator.seek(to: time)
-                }
+                .gesture(trackScrubGesture(trackWidth: trackWidth))
             }
             .frame(height: 40)
 
@@ -79,15 +77,24 @@ struct EditorTimelineView: View {
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
-                    isDraggingPlayhead = true
-                    if coordinator.isPlaying { coordinator.pause() }
-                    let time = xToTime(value.location.x, in: trackWidth)
-                    coordinator.seek(to: time)
+                    beginScrubbing()
+                    scrub(to: value.location.x, trackWidth: trackWidth)
                 }
                 .onEnded { _ in
-                    isDraggingPlayhead = false
+                    endScrubbing()
                 }
         )
+    }
+
+    private func trackScrubGesture(trackWidth: Double) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                beginScrubbing()
+                scrub(to: value.location.x, trackWidth: trackWidth)
+            }
+            .onEnded { _ in
+                endScrubbing()
+            }
     }
 
     // MARK: - Trim Handles
@@ -189,5 +196,29 @@ struct EditorTimelineView: View {
     private func xToTime(_ x: Double, in width: Double) -> TimeInterval {
         guard width > 0 else { return 0 }
         return (x / width) * coordinator.duration
+    }
+
+    private func beginScrubbing() {
+        guard !isScrubbingTimeline else { return }
+        isScrubbingTimeline = true
+        shouldResumePlaybackAfterScrub = coordinator.isPlaying
+        if coordinator.isPlaying {
+            coordinator.pause()
+        }
+    }
+
+    private func scrub(to x: Double, trackWidth: Double) {
+        let clampedX = max(0, min(trackWidth, x))
+        let time = xToTime(clampedX, in: trackWidth)
+        coordinator.seek(to: time)
+    }
+
+    private func endScrubbing() {
+        guard isScrubbingTimeline else { return }
+        isScrubbingTimeline = false
+        if shouldResumePlaybackAfterScrub {
+            coordinator.play()
+        }
+        shouldResumePlaybackAfterScrub = false
     }
 }

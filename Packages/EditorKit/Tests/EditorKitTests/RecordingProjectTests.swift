@@ -304,6 +304,18 @@ struct CursorSmoothingConfigTests {
     func floatyHigherMass() {
         #expect(CursorSmoothingConfig.floaty.mass > CursorSmoothingConfig.smooth.mass)
     }
+
+    @Test("snappy config maps back to snappy preset")
+    func snappyPresetLookup() {
+        #expect(CursorSmoothingConfig.snappy.preset == .snappy)
+    }
+
+    @Test("preset lookup ignores enabled flag")
+    func presetLookupIgnoresEnabledFlag() {
+        var config = CursorSmoothingConfig.floaty
+        config.enabled = false
+        #expect(config.preset == .floaty)
+    }
 }
 
 // MARK: - FrameTransform Suite

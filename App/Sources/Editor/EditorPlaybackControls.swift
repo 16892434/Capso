@@ -17,6 +17,7 @@ struct EditorPlaybackControls: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(.space, modifiers: [])
 
             // Time display
             Text(coordinator.formatTime(coordinator.currentTime))

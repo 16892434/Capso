@@ -4,6 +4,23 @@ import Foundation
 
 // MARK: - CursorSmoothingConfig
 
+public enum CursorSmoothingPreset: String, Codable, CaseIterable, Sendable {
+    case snappy
+    case smooth
+    case floaty
+
+    public var config: CursorSmoothingConfig {
+        switch self {
+        case .snappy:
+            return CursorSmoothingConfig(stiffness: 1500, damping: 77, mass: 1.0)
+        case .smooth:
+            return CursorSmoothingConfig()
+        case .floaty:
+            return CursorSmoothingConfig(stiffness: 50, damping: 10, mass: 2.0)
+        }
+    }
+}
+
 /// Spring physics parameters for smoothing cursor movement during playback/export.
 public struct CursorSmoothingConfig: Codable, Sendable {
     /// When `false`, raw cursor positions are used without smoothing.
@@ -27,17 +44,30 @@ public struct CursorSmoothingConfig: Codable, Sendable {
         self.mass = mass
     }
 
+    public var preset: CursorSmoothingPreset {
+        if matchesPreset(.snappy) { return .snappy }
+        if matchesPreset(.floaty) { return .floaty }
+        return .smooth
+    }
+
+    public func matchesPreset(_ preset: CursorSmoothingPreset) -> Bool {
+        let presetConfig = preset.config
+        return stiffness == presetConfig.stiffness &&
+            damping == presetConfig.damping &&
+            mass == presetConfig.mass
+    }
+
     // Spring-physics presets. The old defaults used low stiffness (120) which
     // settled in ~570ms — visibly laggy during normal drag-to-select. New
     // defaults target critical-or-near-critical damping so the overlay tracks
     // the real cursor with ≤150 ms lag while still filtering micro-jitter.
 
     /// Very responsive, minimal smoothing. Imperceptible lag (~100 ms).
-    public static let snappy = CursorSmoothingConfig(stiffness: 1500, damping: 77, mass: 1.0)
+    public static let snappy = CursorSmoothingPreset.snappy.config
     /// Balanced smoothing — default. Near-critically damped, ~140 ms settle.
-    public static let smooth = CursorSmoothingConfig()
+    public static let smooth = CursorSmoothingPreset.smooth.config
     /// Slow, cinematic feel — heavier mass, visible lag for stylistic effect.
-    public static let floaty = CursorSmoothingConfig(stiffness: 50, damping: 10, mass: 2.0)
+    public static let floaty = CursorSmoothingPreset.floaty.config
 }
 
 // MARK: - RecordingProject

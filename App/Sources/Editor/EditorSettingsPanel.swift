@@ -162,9 +162,9 @@ struct EditorSettingsPanel: View {
                     cardDivider
 
                     settingPickerRow("Style", selection: smoothingPresetBinding) {
-                        Text("Snappy").tag(SmoothingPreset.snappy)
-                        Text("Smooth").tag(SmoothingPreset.smooth)
-                        Text("Floaty").tag(SmoothingPreset.floaty)
+                        Text("Snappy").tag(CursorSmoothingPreset.snappy)
+                        Text("Smooth").tag(CursorSmoothingPreset.smooth)
+                        Text("Floaty").tag(CursorSmoothingPreset.floaty)
                     }
                 }
             }
@@ -174,24 +174,13 @@ struct EditorSettingsPanel: View {
 
     // MARK: - Smoothing Preset
 
-    private enum SmoothingPreset {
-        case snappy, smooth, floaty
-    }
-
-    private var smoothingPresetBinding: Binding<SmoothingPreset> {
+    private var smoothingPresetBinding: Binding<CursorSmoothingPreset> {
         Binding(
             get: {
-                let config = coordinator.project.cursorSmoothing
-                if config.stiffness == 400 { return .snappy }
-                if config.stiffness == 50 { return .floaty }
-                return .smooth
+                coordinator.project.cursorSmoothing.preset
             },
             set: { preset in
-                switch preset {
-                case .snappy: coordinator.project.cursorSmoothing = .snappy
-                case .smooth: coordinator.project.cursorSmoothing = .smooth
-                case .floaty: coordinator.project.cursorSmoothing = .floaty
-                }
+                coordinator.project.cursorSmoothing = preset.config
             }
         )
     }
