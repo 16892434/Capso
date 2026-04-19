@@ -24,6 +24,7 @@ public final class CursorTelemetry: @unchecked Sendable {
     private var runLoopSource: CFRunLoopSource?
     private var runLoop: CFRunLoop?
     private var tapThread: Thread?
+    private var watchdogTimer: DispatchSourceTimer?
 
     /// Opaque pointer produced by `Unmanaged.passRetained(self)` in `start()`.
     /// Stored here so both `stop()` and `deinit` can release it exactly once.
@@ -118,6 +119,7 @@ public final class CursorTelemetry: @unchecked Sendable {
                 // Without this, a single timeout kills all capture for the
                 // rest of the recording.
                 if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    NSLog("[CursorTelemetry] Tap disabled (type=%u), re-enabling", type.rawValue)
                     if let t = telemetry.eventTap {
                         CGEvent.tapEnable(tap: t, enable: true)
                     }
@@ -161,10 +163,27 @@ public final class CursorTelemetry: @unchecked Sendable {
 
         // Block until the run loop is running and `runLoop` is set.
         readySemaphore.wait()
+
+        // Watchdog: periodically check the tap is still enabled and re-enable
+        // if macOS silently disabled it (in case the disable-notification
+        // didn't reach our callback, or was dropped).
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        timer.setEventHandler { [weak self] in
+            guard let self, let t = self.eventTap else { return }
+            if !CGEvent.tapIsEnabled(tap: t) {
+                NSLog("[CursorTelemetry] Watchdog: tap was disabled, re-enabling")
+                CGEvent.tapEnable(tap: t, enable: true)
+            }
+        }
+        timer.resume()
+        watchdogTimer = timer
     }
 
     /// Stops the event tap and releases the retained self reference taken in `start()`.
     public func stop() {
+        watchdogTimer?.cancel()
+        watchdogTimer = nil
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
