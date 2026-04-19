@@ -73,6 +73,8 @@ public final class CursorSmoother: Sendable {
 
     // MARK: - Stored properties
 
+    private static let maxInterpolationGap: TimeInterval = 0.12
+
     private let telemetry: CursorTelemetryData
     private let config: CursorSmoothingConfig
 
@@ -85,11 +87,13 @@ public final class CursorSmoother: Sendable {
 
     // MARK: - Raw position
 
-    /// Returns the raw (unsmoothed) cursor position at `time` by binary-searching the event
-    /// array and linearly interpolating between the two bracketing events.
+    /// Returns the raw (unsmoothed) cursor position at `time`.
     ///
     /// - If `time` is before the first event, the first event's position is returned.
     /// - If `time` is after the last event, the last event's position is returned.
+    /// - Short gaps are linearly interpolated to keep genuine motion smooth.
+    /// - Long gaps are treated as stillness, so the previous position is held until
+    ///   the next real event instead of inventing phantom cursor travel.
     public func rawPosition(at time: TimeInterval) -> (x: Double, y: Double) {
         let events = telemetry.events
 
@@ -125,6 +129,7 @@ public final class CursorSmoother: Sendable {
 
         // Avoid division by zero (duplicate timestamps).
         guard span > 0 else { return (before.x, before.y) }
+        guard span <= Self.maxInterpolationGap else { return (before.x, before.y) }
 
         let t = (time - before.timestamp) / span
         return (

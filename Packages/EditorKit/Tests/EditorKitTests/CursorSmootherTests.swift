@@ -27,16 +27,45 @@ struct CursorSmootherTests {
 
     @Test("Raw position interpolates linearly between events")
     func rawPositionInterpolatesLinearly() {
+        let telemetry = CursorTelemetryData(
+            recordingAreaWidth: 1280,
+            recordingAreaHeight: 720,
+            events: [
+                CursorEvent(timestamp: 0.0, x: 0.1, y: 0.1, type: .move),
+                CursorEvent(timestamp: 0.1, x: 0.5, y: 0.5, type: .move),
+            ]
+        )
         let smoother = CursorSmoother(
-            telemetry: makeTelemetry(),
+            telemetry: telemetry,
             config: .smooth
         )
-        // At t=0.25: midpoint between (0.1,0.1) at t=0.0 and (0.5,0.5) at t=0.5
-        // fraction = (0.25 - 0.0) / (0.5 - 0.0) = 0.5
+        // At t=0.05: midpoint between (0.1,0.1) at t=0.0 and (0.5,0.5) at t=0.1
+        // fraction = (0.05 - 0.0) / (0.1 - 0.0) = 0.5
         // x = 0.1 + 0.5*(0.5-0.1) = 0.3, y = 0.1 + 0.5*(0.5-0.1) = 0.3
-        let pos = smoother.rawPosition(at: 0.25)
+        let pos = smoother.rawPosition(at: 0.05)
         #expect(abs(pos.x - 0.3) < 1e-10)
         #expect(abs(pos.y - 0.3) < 1e-10)
+    }
+
+    @Test("Raw position holds steady across long telemetry gaps")
+    func rawPositionHoldsAcrossLongGap() {
+        let telemetry = CursorTelemetryData(
+            recordingAreaWidth: 1280,
+            recordingAreaHeight: 720,
+            events: [
+                CursorEvent(timestamp: 0.0, x: 0.2, y: 0.2, type: .move),
+                CursorEvent(timestamp: 2.0, x: 0.8, y: 0.8, type: .move),
+            ]
+        )
+
+        let smoother = CursorSmoother(
+            telemetry: telemetry,
+            config: .smooth
+        )
+
+        let pos = smoother.rawPosition(at: 1.0)
+        #expect(abs(pos.x - 0.2) < 1e-10)
+        #expect(abs(pos.y - 0.2) < 1e-10)
     }
 
     @Test("Raw position clamps before first event")
