@@ -17,8 +17,8 @@ public struct CursorSmoothingConfig: Codable, Sendable {
 
     public init(
         enabled: Bool = true,
-        stiffness: Double = 120,
-        damping: Double = 14,
+        stiffness: Double = 800,
+        damping: Double = 56,
         mass: Double = 1.0
     ) {
         self.enabled = enabled
@@ -27,11 +27,16 @@ public struct CursorSmoothingConfig: Codable, Sendable {
         self.mass = mass
     }
 
-    /// Fast, responsive smoothing preset.
-    public static let snappy = CursorSmoothingConfig(stiffness: 400, damping: 30, mass: 1.0)
-    /// Balanced smoothing (default).
+    // Spring-physics presets. The old defaults used low stiffness (120) which
+    // settled in ~570ms — visibly laggy during normal drag-to-select. New
+    // defaults target critical-or-near-critical damping so the overlay tracks
+    // the real cursor with ≤150 ms lag while still filtering micro-jitter.
+
+    /// Very responsive, minimal smoothing. Imperceptible lag (~100 ms).
+    public static let snappy = CursorSmoothingConfig(stiffness: 1500, damping: 77, mass: 1.0)
+    /// Balanced smoothing — default. Near-critically damped, ~140 ms settle.
     public static let smooth = CursorSmoothingConfig()
-    /// Slow, floaty smoothing.
+    /// Slow, cinematic feel — heavier mass, visible lag for stylistic effect.
     public static let floaty = CursorSmoothingConfig(stiffness: 50, damping: 10, mass: 2.0)
 }
 
@@ -49,6 +54,8 @@ public struct RecordingProject: Codable, Sendable {
     public var sourceVideoURL: URL
     /// Optional URL of the cursor telemetry JSON file written by the recorder.
     public var cursorTelemetryURL: URL?
+    /// Whether the final preview/export should display a cursor overlay.
+    public var showsCursor: Bool
     /// Total duration of the source video in seconds.
     public var videoDuration: TimeInterval
     /// Pixel dimensions of the source video.
@@ -69,6 +76,7 @@ public struct RecordingProject: Codable, Sendable {
         id: UUID = UUID(),
         sourceVideoURL: URL,
         cursorTelemetryURL: URL? = nil,
+        showsCursor: Bool = true,
         videoDuration: TimeInterval,
         videoSize: CGSize,
         recordingAreaSize: CGSize,
@@ -81,6 +89,7 @@ public struct RecordingProject: Codable, Sendable {
         self.id = id
         self.sourceVideoURL = sourceVideoURL
         self.cursorTelemetryURL = cursorTelemetryURL
+        self.showsCursor = showsCursor
         self.videoDuration = videoDuration
         self.videoSize = videoSize
         self.recordingAreaSize = recordingAreaSize
@@ -102,7 +111,7 @@ public struct RecordingProject: Codable, Sendable {
     // MARK: - Codable (manual — CGSize is not Codable)
 
     private enum CodingKeys: String, CodingKey {
-        case id, sourceVideoURL, cursorTelemetryURL, videoDuration
+        case id, sourceVideoURL, cursorTelemetryURL, showsCursor, videoDuration
         case videoSizeWidth, videoSizeHeight
         case recordingAreaWidth, recordingAreaHeight
         case trimRegions, zoomSegments, backgroundStyle, cursorSmoothing, createdAt
@@ -113,6 +122,7 @@ public struct RecordingProject: Codable, Sendable {
         id = try c.decode(UUID.self, forKey: .id)
         sourceVideoURL = try c.decode(URL.self, forKey: .sourceVideoURL)
         cursorTelemetryURL = try c.decodeIfPresent(URL.self, forKey: .cursorTelemetryURL)
+        showsCursor = try c.decodeIfPresent(Bool.self, forKey: .showsCursor) ?? true
         videoDuration = try c.decode(TimeInterval.self, forKey: .videoDuration)
         let vsW = try c.decode(Double.self, forKey: .videoSizeWidth)
         let vsH = try c.decode(Double.self, forKey: .videoSizeHeight)
@@ -132,6 +142,7 @@ public struct RecordingProject: Codable, Sendable {
         try c.encode(id, forKey: .id)
         try c.encode(sourceVideoURL, forKey: .sourceVideoURL)
         try c.encodeIfPresent(cursorTelemetryURL, forKey: .cursorTelemetryURL)
+        try c.encode(showsCursor, forKey: .showsCursor)
         try c.encode(videoDuration, forKey: .videoDuration)
         try c.encode(videoSize.width, forKey: .videoSizeWidth)
         try c.encode(videoSize.height, forKey: .videoSizeHeight)
