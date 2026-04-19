@@ -312,14 +312,42 @@ final class EditorCoordinator {
 
     private func loadSystemCursorImage() -> CIImage? {
         let nsImage = NSCursor.arrow.image
-        guard let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return nil
-        }
-        // Scale cursor to ~3.5% of video height so it's visible
-        let targetHeight = project.videoSize.height * 0.035
-        guard CGFloat(cgImage.height) > 0 else { return nil }
-        let s = targetHeight / CGFloat(cgImage.height)
-        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(scaleX: s, y: s))
+        // Render the cursor at the same on-screen pixel size the hardware
+        // cursor would have been recorded at, so the overlay matches the
+        // visual weight the user expects. pixelsPerPoint = recording
+        // video pixels per recording-area point; for Retina captures this
+        // is typically 2.0.
+        let recordingAreaHeight = max(project.recordingAreaSize.height, 1)
+        let pixelsPerPoint = project.videoSize.height / recordingAreaHeight
+        let targetPixelSize = NSSize(
+            width: nsImage.size.width * pixelsPerPoint,
+            height: nsImage.size.height * pixelsPerPoint
+        )
+        guard targetPixelSize.width >= 1, targetPixelSize.height >= 1,
+              let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(targetPixelSize.width.rounded()),
+                pixelsHigh: Int(targetPixelSize.height.rounded()),
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+              )
+        else { return nil }
+        // Setting `size` to logical points makes `nsImage.draw(...)` render
+        // at the bitmap's pixel density rather than the 1x bitmap size.
+        bitmap.size = nsImage.size
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        nsImage.draw(at: .zero, from: .zero, operation: .copy, fraction: 1.0)
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let cgImage = bitmap.cgImage else { return nil }
+        return CIImage(cgImage: cgImage)
     }
 
     // MARK: - Export
