@@ -17,6 +17,10 @@ struct EditorPreviewView: View {
         coordinator.project.backgroundStyle
     }
 
+    private var frameCornerRadius: CGFloat {
+        CGFloat(bg.clampedCornerRadius(for: coordinator.project.videoSize))
+    }
+
     /// Video aspect ratio for constraining the preview area
     private var videoAspectRatio: CGFloat {
         let size = coordinator.project.videoSize
@@ -63,7 +67,7 @@ struct EditorPreviewView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             metalPreview
-                .clipShape(RoundedRectangle(cornerRadius: bg.cornerRadius))
+                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius))
                 .shadow(
                     color: bg.shadowEnabled
                         ? .black.opacity(bg.shadowOpacity)

@@ -205,7 +205,8 @@ public final class FrameCompositor: Sendable {
     /// Applies rounded corners to the frame by using `CIRoundedRectangleGenerator`
     /// as a mask via `CIBlendWithMask`.
     private func applyRoundedCorners(to frame: CIImage, frameRect: CGRect) -> CIImage {
-        let radius = CGFloat(backgroundStyle.cornerRadius) * scale
+        let clampedRadius = backgroundStyle.clampedCornerRadius(for: frameRect.size)
+        let radius = CGFloat(clampedRadius) * scale
         guard radius > 0 else {
             // No rounding — just translate the frame to its canvas position.
             return frame.transformed(by: CGAffineTransform(translationX: frameRect.origin.x, y: frameRect.origin.y))

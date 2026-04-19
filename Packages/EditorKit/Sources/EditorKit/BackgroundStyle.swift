@@ -31,6 +31,8 @@ public struct CodableColor: Codable, Sendable, Equatable {
 
 /// Describes the decorative background rendered behind the video in the editor output.
 public struct BackgroundStyle: Codable, Sendable, Equatable {
+    public static let maxCornerRadius: Double = 120.0
+
     /// When `false`, the video is rendered without any background decoration.
     public var enabled: Bool
     public var colorType: BackgroundColorType
@@ -41,7 +43,7 @@ public struct BackgroundStyle: Codable, Sendable, Equatable {
     public var gradientAngle: Double
     /// Padding around the video content, in points (0–80).
     public var padding: Double
-    /// Corner radius applied to the video frame (0–24).
+    /// Corner radius applied to the video frame.
     public var cornerRadius: Double
     public var shadowEnabled: Bool
     /// Blur radius of the drop shadow (0–30).
@@ -73,6 +75,11 @@ public struct BackgroundStyle: Codable, Sendable, Equatable {
         self.shadowEnabled = shadowEnabled
         self.shadowRadius = shadowRadius
         self.shadowOpacity = shadowOpacity
+    }
+
+    public func clampedCornerRadius(for frameSize: CGSize) -> Double {
+        let maxAllowed = min(frameSize.width, frameSize.height) / 2
+        return min(max(0, cornerRadius), maxAllowed)
     }
 
     /// Default background style with sensible initial values.

@@ -273,6 +273,12 @@ struct BackgroundStyleTests {
         #expect(decoded.gradientAngle == style.gradientAngle)
         #expect(decoded.shadowEnabled == style.shadowEnabled)
     }
+
+    @Test("BackgroundStyle corner radius clamps to half the shorter side")
+    func cornerRadiusClamp() {
+        let style = BackgroundStyle(cornerRadius: 400)
+        #expect(style.clampedCornerRadius(for: CGSize(width: 300, height: 120)) == 60)
+    }
 }
 
 // MARK: - CursorSmoothingConfig Suite

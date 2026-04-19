@@ -72,7 +72,7 @@ struct EditorSettingsPanel: View {
                     verticalSliderRow(
                         "Corner Radius",
                         value: $coordinator.project.backgroundStyle.cornerRadius,
-                        range: 0...24,
+                        range: 0...BackgroundStyle.maxCornerRadius,
                         unit: "px"
                     )
 
