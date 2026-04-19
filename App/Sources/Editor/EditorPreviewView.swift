@@ -41,14 +41,19 @@ struct EditorPreviewView: View {
             previewWithBackground
                 .aspectRatio(compositeAspectRatio, contentMode: .fit)
         } else {
-            metalPreview
+            metalPreview(cornerRadius: 4)
                 .aspectRatio(videoAspectRatio, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
     }
 
-    /// Metal preview configured for zoom-only (no background compositing)
-    private var metalPreview: some View {
+    /// Metal preview configured for zoom-only (no background compositing).
+    ///
+    /// Corner rounding is applied INSIDE `MetalPreviewView` at the CAMetalLayer
+    /// level rather than via `.clipShape` — SwiftUI's clipShape on a
+    /// Metal-backed NSViewRepresentable can leave one or more edges
+    /// un-clipped (users reported the top corners rounded but the right
+    /// side rendered as a straight vertical line).
+    private func metalPreview(cornerRadius: CGFloat) -> some View {
         MetalPreviewView(
             player: coordinator.player,
             playerItem: coordinator.playerItem,
@@ -57,7 +62,8 @@ struct EditorPreviewView: View {
             videoSize: coordinator.project.videoSize,
             cursorTimeline: coordinator.cursorTimeline,
             cursorCIImage: coordinator.cursorCIImage,
-            cursorOverlayProvider: coordinator.cursorOverlayProvider
+            cursorOverlayProvider: coordinator.cursorOverlayProvider,
+            cornerRadius: cornerRadius
         )
     }
 
@@ -66,8 +72,7 @@ struct EditorPreviewView: View {
             backgroundFill
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            metalPreview
-                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
+            metalPreview(cornerRadius: frameCornerRadius)
                 .shadow(
                     color: bg.shadowEnabled
                         ? .black.opacity(bg.shadowOpacity)

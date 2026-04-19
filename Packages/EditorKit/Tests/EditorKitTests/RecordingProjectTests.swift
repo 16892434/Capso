@@ -276,8 +276,20 @@ struct BackgroundStyleTests {
 
     @Test("BackgroundStyle corner radius clamps to the editor max")
     func cornerRadiusClamp() {
+        // Frame 300×120 → geometric cap = 60. With the editor max also at 60,
+        // a radius of 400 should be clamped to the smaller of the two = 60.
         let style = BackgroundStyle(cornerRadius: 400)
-        #expect(style.clampedCornerRadius(for: CGSize(width: 300, height: 120)) == 24)
+        let clamped = style.clampedCornerRadius(for: CGSize(width: 300, height: 120))
+        #expect(clamped == min(BackgroundStyle.maxCornerRadius, 60.0))
+    }
+
+    @Test("BackgroundStyle corner radius clamps below the geometric cap")
+    func cornerRadiusClampsToGeometry() {
+        // Frame 60×40 → geometric cap = 20, well below the editor max.
+        // The clamp should honour the smaller (geometric) limit.
+        let style = BackgroundStyle(cornerRadius: 400)
+        let clamped = style.clampedCornerRadius(for: CGSize(width: 60, height: 40))
+        #expect(clamped == 20)
     }
 }
 

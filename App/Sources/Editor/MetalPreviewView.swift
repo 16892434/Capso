@@ -22,6 +22,12 @@ struct MetalPreviewView: NSViewRepresentable {
     let cursorTimeline: SmoothedCursorTimeline?
     let cursorCIImage: CIImage?
     let cursorOverlayProvider: CursorOverlayProvider?
+    /// Corner radius applied directly to the MTKView's CALayer so the
+    /// Metal texture itself is clipped evenly on all four sides. SwiftUI's
+    /// `.clipShape` on an `NSViewRepresentable` backed by `CAMetalLayer`
+    /// can leave one or two edges un-clipped — the layer-level fix uses
+    /// `cornerCurve = .continuous` to keep the squircle shape.
+    var cornerRadius: CGFloat = 0
 
     // MARK: - Coordinator
 
@@ -48,6 +54,13 @@ struct MetalPreviewView: NSViewRepresentable {
         // Transparent background so letterbox areas show the window material, not black
         view.layer?.isOpaque = false
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+
+        // Corner rounding applied at the CALayer level — SwiftUI `.clipShape`
+        // on an NSViewRepresentable-wrapped MTKView can leak on some edges.
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
+        view.wantsLayer = true
 
         // Continuous rendering at ~30 fps — smooth enough for a preview without hammering GPU.
         view.isPaused = false
@@ -83,5 +96,9 @@ struct MetalPreviewView: NSViewRepresentable {
         renderer.updateZoom(segments: zoomSegments, frameSize: videoSize)
         renderer.updateCursorTimeline(cursorTimeline)
         renderer.updateCursor(image: cursorCIImage, provider: cursorOverlayProvider)
+        // Keep layer-level rounding in sync with the slider value.
+        nsView.layer?.cornerRadius = cornerRadius
+        nsView.layer?.cornerCurve = .continuous
+        nsView.layer?.masksToBounds = true
     }
 }

@@ -31,7 +31,12 @@ public struct CodableColor: Codable, Sendable, Equatable {
 
 /// Describes the decorative background rendered behind the video in the editor output.
 public struct BackgroundStyle: Codable, Sendable, Equatable {
-    public static let maxCornerRadius: Double = 24.0
+    /// Maximum corner radius exposed to the slider. Paired with the
+    /// squircle (continuous) corner rendering so even the slider maximum
+    /// reads as a generously-rounded card rather than a capsule — the
+    /// old ceiling of 24 felt visibly tighter than the outer window
+    /// chrome it was sitting next to.
+    public static let maxCornerRadius: Double = 60.0
 
     /// When `false`, the video is rendered without any background decoration.
     public var enabled: Bool
