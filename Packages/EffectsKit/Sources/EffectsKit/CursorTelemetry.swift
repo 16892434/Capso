@@ -263,14 +263,18 @@ public final class CursorTelemetry: @unchecked Sendable {
     }
 
     private func handleNSEvent(_ ns: NSEvent) {
-        // NSEvent.mouseLocation is in AppKit (bottom-left origin) screen coords.
-        // Convert to CG (top-left origin) global coords to match the same
-        // reference frame our recordingRect is in.
-        let ap = NSEvent.mouseLocation
-        let screenMaxY = NSScreen.screens
-            .map { $0.frame.maxY }
-            .max() ?? 0
-        let cgPoint = CGPoint(x: ap.x, y: screenMaxY - ap.y)
+        // Prefer the event's own cgEvent.location — that's already in global
+        // CG top-left coords (matching recordingRect) and reflects the cursor
+        // position AT THE TIME of the event, not the current cursor position.
+        // Fall back to a manual AppKit→CG conversion if somehow unavailable.
+        let cgPoint: CGPoint
+        if let cge = ns.cgEvent {
+            cgPoint = cge.location
+        } else {
+            let ap = NSEvent.mouseLocation
+            let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
+            cgPoint = CGPoint(x: ap.x, y: primaryHeight - ap.y)
+        }
 
         let eventType: CursorEventType
         switch ns.type {
