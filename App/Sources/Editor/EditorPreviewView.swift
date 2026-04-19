@@ -46,6 +46,12 @@ struct EditorPreviewView: View {
         }
     }
 
+    // NOTE on corner style: the Annotate tool (BeautifySettings/Renderer)
+    // uses classic circular corners — `CGPath(roundedRect:cornerWidth:)`
+    // and the default `.clipShape(RoundedRectangle)` without specifying
+    // `.continuous`. The user picked Annotate as their reference for the
+    // desired look, so we match that style here (both inner and outer).
+
     /// Metal preview configured for zoom-only (no background compositing).
     ///
     /// Corner rounding is applied INSIDE `MetalPreviewView` at the CAMetalLayer
@@ -77,10 +83,7 @@ struct EditorPreviewView: View {
     private var previewWithBackground: some View {
         ZStack {
             backgroundFill
-                .clipShape(RoundedRectangle(
-                    cornerRadius: Self.outerFrameCornerRadius,
-                    style: .continuous
-                ))
+                .clipShape(RoundedRectangle(cornerRadius: Self.outerFrameCornerRadius))
 
             metalPreview(cornerRadius: frameCornerRadius)
                 .shadow(

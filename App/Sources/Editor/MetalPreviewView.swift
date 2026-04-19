@@ -43,15 +43,14 @@ struct MetalPreviewView: NSViewRepresentable {
     // MARK: - NSViewRepresentable
 
     func makeNSView(context: Context) -> NSView {
-        // Container NSView holds the rounded-corner mask. CAMetalLayer silently
-        // falls back to `.circular` when `cornerCurve = .continuous` is applied
-        // directly — producing a visible "arc-to-straight-line" join at large
-        // radii. Putting the MTKView inside a plain container and clipping on
-        // the container's vanilla CALayer keeps the squircle shape.
+        // Container NSView holds the rounded-corner mask. SwiftUI's
+        // `.clipShape` on a Metal-backed view leaks on some edges, so we
+        // clip on the container's vanilla CALayer instead. Classic circular
+        // corners (the default cornerCurve) match the Annotate tool's
+        // look — that's the reference the user settled on.
         let container = NSView()
         container.wantsLayer = true
         container.layer?.cornerRadius = cornerRadius
-        container.layer?.cornerCurve = .continuous
         container.layer?.masksToBounds = true
         container.layer?.isOpaque = false
 
@@ -116,7 +115,6 @@ struct MetalPreviewView: NSViewRepresentable {
         renderer.updateCursor(image: cursorCIImage, provider: cursorOverlayProvider)
         // Keep container-level rounding in sync with the slider value.
         nsView.layer?.cornerRadius = cornerRadius
-        nsView.layer?.cornerCurve = .continuous
         nsView.layer?.masksToBounds = true
     }
 }
