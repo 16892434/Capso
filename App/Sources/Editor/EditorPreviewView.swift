@@ -46,11 +46,21 @@ struct EditorPreviewView: View {
         }
     }
 
-    // NOTE on corner style: the Annotate tool (BeautifySettings/Renderer)
-    // uses classic circular corners — `CGPath(roundedRect:cornerWidth:)`
-    // and the default `.clipShape(RoundedRectangle)` without specifying
-    // `.continuous`. The user picked Annotate as their reference for the
-    // desired look, so we match that style here (both inner and outer).
+    // NOTE on corner style: the Annotate tool is the user's reference.
+    // Annotate's outer "beautifyBackground" is a plain Rectangle() with NO
+    // corner clipping — only the inner image gets rounded corners. We
+    // previously tried a rounded outer frame (cornerRadius: 8 then 12);
+    // at small padding, that extra outer arc visually competed with the
+    // inner image's rounding, and the user correctly identified this as
+    // "not like Annotate." Match Annotate's structure exactly:
+    //
+    //   ZStack {
+    //     flat background rectangle  // no clipShape
+    //     inner image
+    //       .clipShape(RoundedRectangle(cornerRadius: slider))
+    //       .shadow(...)
+    //       .padding(bg.padding)
+    //   }
 
     /// Metal preview configured for zoom-only (no background compositing).
     ///
@@ -73,17 +83,11 @@ struct EditorPreviewView: View {
         )
     }
 
-    /// Fixed outer frame radius. Stays constant as the user moves either
-    /// Padding or Corner Radius — Corner Radius controls the inner video
-    /// only, and Padding adds space without reshaping the outer. A
-    /// previous attempt made this concentric (outer = inner + padding)
-    /// which visually coupled the two sliders in an unwanted way.
-    private static let outerFrameCornerRadius: CGFloat = 12
-
     private var previewWithBackground: some View {
         ZStack {
+            // Flat background rectangle — no corner clipping. Matches
+            // Annotate's BeautifyBackground structure exactly.
             backgroundFill
-                .clipShape(RoundedRectangle(cornerRadius: Self.outerFrameCornerRadius))
 
             metalPreview(cornerRadius: frameCornerRadius)
                 .shadow(
