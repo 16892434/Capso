@@ -13,6 +13,9 @@ public final class FrameCompositor: Sendable {
 
     // MARK: - Stored Properties
 
+    private static let cursorHotspotXRatio: CGFloat = 0.12
+    private static let cursorHotspotYRatio: CGFloat = 0.88
+
     private let sourceSize: CGSize
     private let backgroundStyle: BackgroundStyle
     private let scale: CGFloat
@@ -74,9 +77,10 @@ public final class FrameCompositor: Sendable {
         // 1. Zoom
         var result = applyZoom(to: frame, transform: zoomTransform)
 
-        // 2. Cursor overlay
+        // 2. Cursor overlay — also passed the zoom transform so the cursor
+        // lands on the zoomed content, not the original unzoomed position.
         if let position = cursorPosition, let cursor = cursorImage {
-            result = applyCursor(cursor, at: position, over: result)
+            result = applyCursor(cursor, at: position, zoomTransform: zoomTransform, over: result)
         }
 
         // 3 – 5. Background
@@ -124,18 +128,42 @@ public final class FrameCompositor: Sendable {
 
     // MARK: - Private: Cursor
 
-    private func applyCursor(_ cursor: CIImage, at position: CGPoint, over background: CIImage) -> CIImage {
+    private func applyCursor(
+        _ cursor: CIImage,
+        at position: CGPoint,
+        zoomTransform: FrameTransform,
+        over background: CIImage
+    ) -> CIImage {
         let w = sourceSize.width
         let h = sourceSize.height
 
         // `position` uses top-left origin (screen coords); CIImage uses bottom-left.
-        let x = position.x * w
-        let y = (1.0 - position.y) * h
+        // Convert to the cursor's raw frame coordinates first.
+        let origX = position.x * w
+        let origY = (1.0 - position.y) * h
 
-        // Centre the cursor image on the position.
-        let cx = cursor.extent.width / 2.0
-        let cy = cursor.extent.height / 2.0
-        let placed = cursor.transformed(by: CGAffineTransform(translationX: x - cx, y: y - cy))
+        // Zoom transforms the scene with: p_out = (p_in - focus) * s + center
+        // The cursor must follow the same transform, otherwise it renders at
+        // the UNZOOMED position and drifts away from the content it should be
+        // attached to. The cursor image itself is also scaled by `s` so it
+        // integrates visually with the zoomed scene.
+        let s = CGFloat(zoomTransform.scale)
+        let focusX = CGFloat(zoomTransform.translateX) * w
+        let focusY = (1.0 - CGFloat(zoomTransform.translateY)) * h
+        let centerX = w / 2.0
+        let centerY = h / 2.0
+
+        let x = (origX - focusX) * s + centerX
+        let y = (origY - focusY) * s + centerY
+
+        // Align the cursor hotspot (tip), not the image centre, to the tracked
+        // position — hotspot offsets scale along with the image.
+        let scaledCursor = cursor.transformed(by: CGAffineTransform(scaleX: s, y: s))
+        let hotspotX = scaledCursor.extent.width * Self.cursorHotspotXRatio
+        let hotspotY = scaledCursor.extent.height * Self.cursorHotspotYRatio
+        let placed = scaledCursor.transformed(
+            by: CGAffineTransform(translationX: x - hotspotX, y: y - hotspotY)
+        )
 
         // Composite cursor over frame, clamped to source bounds.
         return placed.composited(over: background).cropped(to: background.extent)
