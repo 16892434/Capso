@@ -35,13 +35,26 @@ struct MetalPreviewView: NSViewRepresentable {
     final class Coordinator {
         var renderer: MetalPreviewRenderer?
         var videoOutput: AVPlayerItemVideoOutput?
+        weak var mtkView: MTKView?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     // MARK: - NSViewRepresentable
 
-    func makeNSView(context: Context) -> MTKView {
+    func makeNSView(context: Context) -> NSView {
+        // Container NSView holds the rounded-corner mask. CAMetalLayer silently
+        // falls back to `.circular` when `cornerCurve = .continuous` is applied
+        // directly — producing a visible "arc-to-straight-line" join at large
+        // radii. Putting the MTKView inside a plain container and clipping on
+        // the container's vanilla CALayer keeps the squircle shape.
+        let container = NSView()
+        container.wantsLayer = true
+        container.layer?.cornerRadius = cornerRadius
+        container.layer?.cornerCurve = .continuous
+        container.layer?.masksToBounds = true
+        container.layer?.isOpaque = false
+
         let view = MTKView()
 
         // Pixel format must match what CIContext expects when rendering to the texture.
@@ -54,13 +67,6 @@ struct MetalPreviewView: NSViewRepresentable {
         // Transparent background so letterbox areas show the window material, not black
         view.layer?.isOpaque = false
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-
-        // Corner rounding applied at the CALayer level — SwiftUI `.clipShape`
-        // on an NSViewRepresentable-wrapped MTKView can leak on some edges.
-        view.layer?.cornerRadius = cornerRadius
-        view.layer?.cornerCurve = .continuous
-        view.layer?.masksToBounds = true
-        view.wantsLayer = true
 
         // Continuous rendering at ~30 fps — smooth enough for a preview without hammering GPU.
         view.isPaused = false
@@ -87,16 +93,28 @@ struct MetalPreviewView: NSViewRepresentable {
             context.coordinator.renderer = renderer
         }
 
-        return view
+        // Fill the container with the MTKView. The container's masksToBounds
+        // handles the squircle clipping for us.
+        view.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            view.topAnchor.constraint(equalTo: container.topAnchor),
+            view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        context.coordinator.mtkView = view
+
+        return container
     }
 
-    func updateNSView(_ nsView: MTKView, context: Context) {
+    func updateNSView(_ nsView: NSView, context: Context) {
         guard let renderer = context.coordinator.renderer else { return }
         renderer.updateCompositor(sourceSize: videoSize, backgroundStyle: backgroundStyle)
         renderer.updateZoom(segments: zoomSegments, frameSize: videoSize)
         renderer.updateCursorTimeline(cursorTimeline)
         renderer.updateCursor(image: cursorCIImage, provider: cursorOverlayProvider)
-        // Keep layer-level rounding in sync with the slider value.
+        // Keep container-level rounding in sync with the slider value.
         nsView.layer?.cornerRadius = cornerRadius
         nsView.layer?.cornerCurve = .continuous
         nsView.layer?.masksToBounds = true
