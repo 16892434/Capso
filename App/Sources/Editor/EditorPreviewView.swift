@@ -67,10 +67,19 @@ struct EditorPreviewView: View {
         )
     }
 
+    /// Concentric outer radius: the band of background padding between the
+    /// video and the outer frame has uniform thickness only if the outer
+    /// corner grows by `padding`. Otherwise the padding bulges at the
+    /// corners — the user correctly spotted this looking broken at
+    /// padding=16 with a hardcoded outer radius.
+    private var outerCornerRadius: CGFloat {
+        frameCornerRadius + CGFloat(bg.padding)
+    }
+
     private var previewWithBackground: some View {
         ZStack {
             backgroundFill
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: outerCornerRadius, style: .continuous))
 
             metalPreview(cornerRadius: frameCornerRadius)
                 .shadow(
