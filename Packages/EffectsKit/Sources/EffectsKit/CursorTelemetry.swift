@@ -74,6 +74,18 @@ public final class CursorTelemetry: @unchecked Sendable {
 
     // MARK: - Coordinate normalization
 
+    /// Returns true when `globalPoint` falls within `recordingRect` (inclusive
+    /// of the edges). Used to skip recording events when the cursor leaves
+    /// the captured region — otherwise we'd clamp to an edge and the overlay
+    /// at playback would appear pinned to the boundary even when the real
+    /// cursor had clearly moved away to a different app/screen.
+    public func isInsideRecordingRect(_ globalPoint: CGPoint) -> Bool {
+        let x = Double(globalPoint.x)
+        let y = Double(globalPoint.y)
+        return x >= recordingRect.minX && x <= recordingRect.maxX
+            && y >= recordingRect.minY && y <= recordingRect.maxY
+    }
+
     /// Converts a global display point to normalized coordinates [0, 1] clamped to the
     /// recording area.
     ///
@@ -276,6 +288,10 @@ public final class CursorTelemetry: @unchecked Sendable {
             cgPoint = CGPoint(x: ap.x, y: primaryHeight - ap.y)
         }
 
+        // Cursor was outside the capture region — skip, otherwise clamping
+        // to an edge makes the overlay "jump" to a boundary during playback.
+        guard isInsideRecordingRect(cgPoint) else { return }
+
         let eventType: CursorEventType
         switch ns.type {
         case .leftMouseDown:  eventType = .leftClick
@@ -351,6 +367,12 @@ public final class CursorTelemetry: @unchecked Sendable {
 
     private func handleCGEvent(type: CGEventType, event: CGEvent) {
         let location = event.location
+        let point = CGPoint(x: location.x, y: location.y)
+
+        // Cursor outside the captured region — skip, same rationale as
+        // handleNSEvent (avoid edge-clamped positions in telemetry).
+        guard isInsideRecordingRect(point) else { return }
+
         // Timestamp is relative to when start() was called, not absolute uptime.
         let timestamp = ProcessInfo.processInfo.systemUptime - startTime
 
@@ -364,7 +386,7 @@ public final class CursorTelemetry: @unchecked Sendable {
             eventType = .move
         }
 
-        let (nx, ny) = normalize(globalPoint: CGPoint(x: location.x, y: location.y))
+        let (nx, ny) = normalize(globalPoint: point)
         let cursorEvent = CursorEvent(timestamp: timestamp, x: nx, y: ny, type: eventType)
         lock.withLock { events.append(cursorEvent) }
     }
