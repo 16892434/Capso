@@ -2,6 +2,7 @@
 
 @preconcurrency import Foundation
 import CoreGraphics
+import AppKit
 
 /// Records cursor movement and click events during a screen recording session.
 ///
@@ -26,6 +27,13 @@ public final class CursorTelemetry: @unchecked Sendable {
     private var tapThread: Thread?
     private var watchdogTimer: DispatchSourceTimer?
     private var receivedEventCount: Int = 0
+
+    // NSEvent monitors — captured separately from the CGEventTap so we still
+    // get telemetry when the HID tap is disabled (e.g. by Secure Input mode
+    // which macOS enables when a Terminal password prompt is focused).
+    private var globalNSMonitor: Any?
+    private var localNSMonitor: Any?
+    private var nsEventCount: Int = 0
 
     // MARK: - Debug log file
 
@@ -197,12 +205,16 @@ public final class CursorTelemetry: @unchecked Sendable {
         // tap is still enabled; re-enable if macOS silently disabled it.
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0)
-        var lastCount = 0
+        var lastTapCount = 0
+        var lastNSCount = 0
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            let currentCount = self.receivedEventCount
-            let delta = currentCount - lastCount
-            lastCount = currentCount
+            let tapCount = self.receivedEventCount
+            let nsCount = self.nsEventCount
+            let tapDelta = tapCount - lastTapCount
+            let nsDelta = nsCount - lastNSCount
+            lastTapCount = tapCount
+            lastNSCount = nsCount
             let tapAlive: String
             if let t = self.eventTap {
                 let enabled = CGEvent.tapIsEnabled(tap: t)
@@ -214,17 +226,77 @@ public final class CursorTelemetry: @unchecked Sendable {
             } else {
                 tapAlive = "tap=nil"
             }
-            CursorTelemetry.debugLog("heartbeat: events_total=\(currentCount) delta=\(delta) tap=\(tapAlive)")
+            CursorTelemetry.debugLog(
+                "heartbeat: tap=(total=\(tapCount) delta=\(tapDelta) \(tapAlive)) ns=(total=\(nsCount) delta=\(nsDelta))"
+            )
         }
         timer.resume()
         watchdogTimer = timer
+
+        // Parallel capture path via NSEvent monitors — NSEvent uses a
+        // different delivery mechanism than CGEventTap and is NOT killed
+        // by Secure Input or tap-timeout. If the tap dies, these keep the
+        // telemetry flowing.
+        installNSEventMonitors()
+    }
+
+    private func installNSEventMonitors() {
+        let mask: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+            .leftMouseDown, .rightMouseDown,
+            .scrollWheel,
+        ]
+
+        let handler: (NSEvent) -> Void = { [weak self] ns in
+            guard let self else { return }
+            self.handleNSEvent(ns)
+        }
+
+        globalNSMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler)
+        // Local monitor so we also see events when Capso is frontmost.
+        localNSMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { ns in
+            handler(ns)
+            return ns
+        }
+        Self.debugLog("NSEvent global+local monitors installed")
+    }
+
+    private func handleNSEvent(_ ns: NSEvent) {
+        // NSEvent.mouseLocation is in AppKit (bottom-left origin) screen coords.
+        // Convert to CG (top-left origin) global coords to match the same
+        // reference frame our recordingRect is in.
+        let ap = NSEvent.mouseLocation
+        let screenMaxY = NSScreen.screens
+            .map { $0.frame.maxY }
+            .max() ?? 0
+        let cgPoint = CGPoint(x: ap.x, y: screenMaxY - ap.y)
+
+        let eventType: CursorEventType
+        switch ns.type {
+        case .leftMouseDown:  eventType = .leftClick
+        case .rightMouseDown: eventType = .rightClick
+        default:              eventType = .move
+        }
+
+        let timestamp = ProcessInfo.processInfo.systemUptime - startTime
+        let (nx, ny) = normalize(globalPoint: cgPoint)
+        let cursorEvent = CursorEvent(timestamp: timestamp, x: nx, y: ny, type: eventType)
+        lock.withLock { events.append(cursorEvent) }
+        nsEventCount &+= 1
     }
 
     /// Stops the event tap and releases the retained self reference taken in `start()`.
     public func stop() {
-        Self.debugLog("stop() called; total events received=\(receivedEventCount)")
+        Self.debugLog("stop() called; tap_total=\(receivedEventCount) ns_total=\(nsEventCount)")
         watchdogTimer?.cancel()
         watchdogTimer = nil
+
+        if let g = globalNSMonitor { NSEvent.removeMonitor(g) }
+        if let l = localNSMonitor { NSEvent.removeMonitor(l) }
+        globalNSMonitor = nil
+        localNSMonitor = nil
+
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
