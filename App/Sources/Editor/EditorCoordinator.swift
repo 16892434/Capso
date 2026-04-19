@@ -195,6 +195,12 @@ final class EditorCoordinator {
         project.cursorTelemetryURL != nil
     }
 
+    /// Render a software cursor only when this project is meant to show a
+    /// cursor and telemetry exists to drive it.
+    var shouldRenderCursorOverlay: Bool {
+        project.showsCursor && project.cursorTelemetryURL != nil
+    }
+
     /// Replace all `.auto` zoom segments with a fresh batch from AutoZoomDetector.
     /// `.manual` segments (user-created) are preserved.
     /// Returns the number of new `.auto` segments inserted.
@@ -288,6 +294,7 @@ final class EditorCoordinator {
     private var _cursorImageLoaded = false
 
     var cursorCIImage: CIImage? {
+        guard shouldRenderCursorOverlay else { return nil }
         if !_cursorImageLoaded {
             _cursorImageLoaded = true
             _cursorCIImage = loadSystemCursorImage()
@@ -299,6 +306,7 @@ final class EditorCoordinator {
     private var _cursorOverlayProviderBuilt = false
 
     var cursorOverlayProvider: CursorOverlayProvider? {
+        guard shouldRenderCursorOverlay else { return nil }
         if !_cursorOverlayProviderBuilt {
             _cursorOverlayProviderBuilt = true
             if let url = project.cursorTelemetryURL,
@@ -311,50 +319,105 @@ final class EditorCoordinator {
     }
 
     private func loadSystemCursorImage() -> CIImage? {
+        let targetHeight = cursorTargetHeight()
+
+        if let cgImage = resolvedSystemCursorCGImage(),
+           let scaled = scaleCursorImage(cgImage, targetHeight: targetHeight) {
+            return scaled
+        }
+
+        return makeFallbackCursorImage(targetHeight: targetHeight)
+    }
+
+    private func cursorTargetHeight() -> CGFloat {
+        let displayScale: CGFloat
+        if project.recordingAreaSize.height > 0 {
+            displayScale = max(CGFloat(1.0), project.videoSize.height / project.recordingAreaSize.height)
+        } else {
+            displayScale = CGFloat(1.0)
+        }
+
+        let fromScale = CGFloat(18.0) * displayScale
+        let fromVideo = project.videoSize.height * 0.038
+        return min(max(fromScale, fromVideo), CGFloat(48.0))
+    }
+
+    private func resolvedSystemCursorCGImage() -> CGImage? {
         let nsImage = NSCursor.arrow.image
-        // Render the cursor at the same on-screen pixel size the hardware
-        // cursor would have been recorded at, so the overlay matches the
-        // visual weight the user expects. pixelsPerPoint = recording
-        // video pixels per recording-area point; for Retina captures this
-        // is typically 2.0.
-        let recordingAreaHeight = max(project.recordingAreaSize.height, 1)
-        let pixelsPerPoint = project.videoSize.height / recordingAreaHeight
-        let targetPixelSize = NSSize(
-            width: nsImage.size.width * pixelsPerPoint,
-            height: nsImage.size.height * pixelsPerPoint
-        )
-        guard targetPixelSize.width >= 1, targetPixelSize.height >= 1,
-              let bitmap = NSBitmapImageRep(
-                bitmapDataPlanes: nil,
-                pixelsWide: Int(targetPixelSize.width.rounded()),
-                pixelsHigh: Int(targetPixelSize.height.rounded()),
-                bitsPerSample: 8,
-                samplesPerPixel: 4,
-                hasAlpha: true,
-                isPlanar: false,
-                colorSpaceName: .deviceRGB,
-                bytesPerRow: 0,
-                bitsPerPixel: 0
-              )
-        else { return nil }
-        // Setting `size` to logical points makes `nsImage.draw(...)` render
-        // at the bitmap's pixel density rather than the 1x bitmap size.
-        bitmap.size = nsImage.size
 
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
-        nsImage.draw(at: .zero, from: .zero, operation: .copy, fraction: 1.0)
-        NSGraphicsContext.restoreGraphicsState()
+        if let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           cgImage.width > 0,
+           cgImage.height > 0 {
+            return cgImage
+        }
 
-        guard let cgImage = bitmap.cgImage else { return nil }
-        return CIImage(cgImage: cgImage)
+        if let tiffData = nsImage.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiffData),
+           let cgImage = bitmap.cgImage,
+           cgImage.width > 0,
+           cgImage.height > 0 {
+            return cgImage
+        }
+
+        return nil
+    }
+
+    private func scaleCursorImage(_ cgImage: CGImage, targetHeight: CGFloat) -> CIImage? {
+        guard CGFloat(cgImage.height) > 0 else { return nil }
+        let scale = targetHeight / CGFloat(cgImage.height)
+        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+    }
+
+    private func makeFallbackCursorImage(targetHeight: CGFloat) -> CIImage? {
+        let baseSize = CGSize(width: 128, height: 128)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let context = CGContext(
+            data: nil,
+            width: Int(baseSize.width),
+            height: Int(baseSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.clear(CGRect(origin: .zero, size: baseSize))
+        context.setAllowsAntialiasing(true)
+        context.setShouldAntialias(true)
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 18, y: 112))
+        path.addLine(to: CGPoint(x: 58, y: 16))
+        path.addLine(to: CGPoint(x: 69, y: 47))
+        path.addLine(to: CGPoint(x: 92, y: 35))
+        path.addLine(to: CGPoint(x: 108, y: 68))
+        path.addLine(to: CGPoint(x: 82, y: 79))
+        path.addLine(to: CGPoint(x: 93, y: 112))
+        path.closeSubpath()
+
+        context.addPath(path)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fillPath()
+
+        context.addPath(path)
+        context.setStrokeColor(NSColor.black.cgColor)
+        context.setLineWidth(6)
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+        context.strokePath()
+
+        guard let cgImage = context.makeImage() else { return nil }
+        return scaleCursorImage(cgImage, targetHeight: targetHeight)
     }
 
     // MARK: - Export
 
     /// Use CompositorExporter when visual effects need to be baked into the export.
     var hasCompositingEffects: Bool {
-        project.backgroundStyle.enabled || !project.zoomSegments.isEmpty
+        project.backgroundStyle.enabled || !project.zoomSegments.isEmpty || shouldRenderCursorOverlay
     }
 
     func exportVideo(format: ExportFormat, quality: ExportQuality, destination: URL) async throws -> URL {
@@ -394,19 +457,9 @@ final class EditorCoordinator {
         quality: ExportQuality,
         destination: URL
     ) async throws -> URL {
-        var cursorTimeline: SmoothedCursorTimeline?
-        if project.cursorSmoothing.enabled, let telemetryURL = project.cursorTelemetryURL {
-            if let telemetryData = try? CursorTelemetry.load(from: telemetryURL) {
-                let smoother = CursorSmoother(
-                    telemetry: telemetryData,
-                    config: project.cursorSmoothing
-                )
-                cursorTimeline = smoother.buildSmoothedTimeline(
-                    fps: 60,
-                    duration: project.videoDuration
-                )
-            }
-        }
+        let cursorTimeline = (!project.zoomSegments.isEmpty || shouldRenderCursorOverlay)
+            ? self.cursorTimeline
+            : nil
 
         var zoomInterpolator: ZoomInterpolator?
         if !project.zoomSegments.isEmpty {

@@ -9,10 +9,12 @@ import Foundation
 private func makeProject(
     duration: TimeInterval = 60.0,
     trimRegions: [TrimRegion] = [],
-    zoomSegments: [ZoomSegment] = []
+    zoomSegments: [ZoomSegment] = [],
+    showsCursor: Bool = true
 ) -> RecordingProject {
     RecordingProject(
         sourceVideoURL: URL(fileURLWithPath: "/tmp/test.mov"),
+        showsCursor: showsCursor,
         videoDuration: duration,
         videoSize: CGSize(width: 1920, height: 1080),
         recordingAreaSize: CGSize(width: 1920, height: 1080),
@@ -41,8 +43,59 @@ struct RecordingProjectTests {
         #expect(loaded.videoSize.width == original.videoSize.width)
         #expect(loaded.videoSize.height == original.videoSize.height)
         #expect(loaded.sourceVideoURL == original.sourceVideoURL)
+        #expect(loaded.showsCursor == original.showsCursor)
         #expect(loaded.trimRegions.count == original.trimRegions.count)
         #expect(loaded.zoomSegments.count == original.zoomSegments.count)
+    }
+
+    @Test("cursor visibility round-trips through JSON")
+    func cursorVisibilityRoundTrip() throws {
+        let original = makeProject(showsCursor: false)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RecordingProject.self, from: data)
+        #expect(decoded.showsCursor == false)
+    }
+
+    @Test("legacy JSON without cursor visibility defaults to true")
+    func legacyJSONDefaultsCursorVisibility() throws {
+        let legacyJSON = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "sourceVideoURL": "file:///tmp/test.mov",
+          "videoDuration": 12,
+          "videoSizeWidth": 1920,
+          "videoSizeHeight": 1080,
+          "recordingAreaWidth": 1920,
+          "recordingAreaHeight": 1080,
+          "trimRegions": [],
+          "zoomSegments": [],
+          "backgroundStyle": {
+            "enabled": false,
+            "colorType": "solid",
+            "solidColor": { "red": 0.2, "green": 0.2, "blue": 0.2, "alpha": 1 },
+            "gradientFrom": { "red": 0, "green": 0, "blue": 0, "alpha": 1 },
+            "gradientTo": { "red": 0.2, "green": 0.2, "blue": 0.2, "alpha": 1 },
+            "gradientAngle": 135,
+            "padding": 20,
+            "cornerRadius": 12,
+            "shadowEnabled": true,
+            "shadowRadius": 15,
+            "shadowOpacity": 0.5
+          },
+          "cursorSmoothing": {
+            "enabled": true,
+            "stiffness": 120,
+            "damping": 14,
+            "mass": 1
+          },
+          "createdAt": "2026-04-18T00:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(RecordingProject.self, from: legacyJSON)
+        #expect(decoded.showsCursor == true)
     }
 
     @Test("effectiveDuration subtracts trim regions")
