@@ -37,12 +37,30 @@ struct EditorPreviewView: View {
     }
 
     var body: some View {
+        // Compute preview→source scale so corner radius, padding and shadow
+        // — all stored in SOURCE-pixel units to match the export compositor
+        // — can be rendered in view points. Without this, the preview shows
+        // a different-sized corner than what the exported video contains,
+        // and the slider max is pinned to the preview's view-point range
+        // instead of the source's pixel range.
         if bg.enabled {
-            previewWithBackground
-                .aspectRatio(compositeAspectRatio, contentMode: .fit)
+            GeometryReader { proxy in
+                let compositeSourceWidth = coordinator.project.videoSize.width + bg.padding * 2
+                let displayScale: CGFloat = compositeSourceWidth > 0
+                    ? proxy.size.width / compositeSourceWidth
+                    : 1.0
+                previewWithBackground(displayScale: displayScale)
+            }
+            .aspectRatio(compositeAspectRatio, contentMode: .fit)
         } else {
-            metalPreview(cornerRadius: 4)
-                .aspectRatio(videoAspectRatio, contentMode: .fit)
+            GeometryReader { proxy in
+                let sourceWidth = coordinator.project.videoSize.width
+                let displayScale: CGFloat = sourceWidth > 0
+                    ? proxy.size.width / sourceWidth
+                    : 1.0
+                metalPreview(cornerRadius: 4 * displayScale)
+            }
+            .aspectRatio(videoAspectRatio, contentMode: .fit)
         }
     }
 
@@ -83,21 +101,31 @@ struct EditorPreviewView: View {
         )
     }
 
-    private var previewWithBackground: some View {
-        ZStack {
+    /// Renders the framed preview at a given preview→source scale.
+    ///
+    /// `displayScale` converts source-pixel units (slider values for
+    /// cornerRadius / padding / shadowRadius) into view points. This keeps
+    /// the preview visually consistent with the exported video, which is
+    /// drawn in source space by `FrameCompositor`.
+    private func previewWithBackground(displayScale: CGFloat) -> some View {
+        let scaledCorner = frameCornerRadius * displayScale
+        let scaledPadding = bg.padding * displayScale
+        let scaledShadowRadius = bg.shadowRadius * displayScale
+
+        return ZStack {
             // Flat background rectangle — no corner clipping. Matches
             // Annotate's BeautifyBackground structure exactly.
             backgroundFill
 
-            metalPreview(cornerRadius: frameCornerRadius)
+            metalPreview(cornerRadius: scaledCorner)
                 .shadow(
                     color: bg.shadowEnabled
                         ? .black.opacity(bg.shadowOpacity)
                         : .clear,
-                    radius: bg.shadowEnabled ? bg.shadowRadius : 0,
-                    y: bg.shadowEnabled ? bg.shadowRadius * 0.3 : 0
+                    radius: bg.shadowEnabled ? scaledShadowRadius : 0,
+                    y: bg.shadowEnabled ? scaledShadowRadius * 0.3 : 0
                 )
-                .padding(bg.padding)
+                .padding(scaledPadding)
         }
     }
 

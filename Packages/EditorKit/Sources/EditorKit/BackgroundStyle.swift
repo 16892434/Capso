@@ -31,13 +31,19 @@ public struct CodableColor: Codable, Sendable, Equatable {
 
 /// Describes the decorative background rendered behind the video in the editor output.
 public struct BackgroundStyle: Codable, Sendable, Equatable {
-    /// Maximum corner radius exposed to the slider. Paired with the
-    /// squircle (continuous) corner rendering and the layer-level clip,
-    /// the slider max should reach "rounded-card" without pushing into
-    /// aggressive iOS-widget territory. 32 sits between the old 24 (felt
-    /// tight once the all-edges-equal bug was fixed) and the trial 60
-    /// (which the user correctly called overstated).
-    public static let maxCornerRadius: Double = 32.0
+    /// Maximum corner radius exposed to the slider, expressed in SOURCE
+    /// (video) pixels — the same space the export compositor works in
+    /// (`FrameCompositor.applyRoundedCorners` multiplies by canvas/source
+    /// scale). The preview mirrors this by multiplying by preview/source
+    /// scale before setting `CALayer.cornerRadius`, so the slider produces
+    /// the same visible corner on screen as appears in the exported video.
+    ///
+    /// Earlier iterations set this value directly as VIEW points, which
+    /// meant a slider max of 32 produced a tiny corner on a 1920×1080
+    /// preview (~3% of the visible short dimension). 120 source-pixels on
+    /// a 1920-wide video is ~6% — matches Annotate's chunky-rounded-card
+    /// look that the user is comparing against.
+    public static let maxCornerRadius: Double = 120.0
 
     /// When `false`, the video is rendered without any background decoration.
     public var enabled: Bool
