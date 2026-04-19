@@ -79,7 +79,7 @@ public final class CursorTelemetry: @unchecked Sendable {
     /// Starts capturing cursor events via a CGEvent tap on a background thread.
     ///
     /// Captures: `.mouseMoved`, `.leftMouseDragged`, `.rightMouseDragged`,
-    /// `.leftMouseDown`, `.rightMouseDown`.
+    /// `.scrollWheel`, `.leftMouseDown`, `.rightMouseDown`.
     /// The tap runs in listen-only mode (`.listenOnly`) at `.cghidEventTap`.
     ///
     /// A `DispatchSemaphore` ensures the background run-loop is up and `runLoop`
@@ -95,6 +95,7 @@ public final class CursorTelemetry: @unchecked Sendable {
             (1 << CGEventType.mouseMoved.rawValue)
             | (1 << CGEventType.leftMouseDragged.rawValue)
             | (1 << CGEventType.rightMouseDragged.rawValue)
+            | (1 << CGEventType.scrollWheel.rawValue)
             | (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
 
@@ -111,6 +112,18 @@ public final class CursorTelemetry: @unchecked Sendable {
             callback: { _, type, event, userInfo -> Unmanaged<CGEvent>? in
                 guard let userInfo else { return Unmanaged.passUnretained(event) }
                 let telemetry = Unmanaged<CursorTelemetry>.fromOpaque(userInfo).takeUnretainedValue()
+
+                // If the system disabled the tap (callback took too long, or
+                // a user-input issue), re-enable it so subsequent events flow.
+                // Without this, a single timeout kills all capture for the
+                // rest of the recording.
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    if let t = telemetry.eventTap {
+                        CGEvent.tapEnable(tap: t, enable: true)
+                    }
+                    return Unmanaged.passUnretained(event)
+                }
+
                 telemetry.handleCGEvent(type: type, event: event)
                 return Unmanaged.passUnretained(event)
             },
