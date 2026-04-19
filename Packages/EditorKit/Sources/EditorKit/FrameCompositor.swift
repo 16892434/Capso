@@ -230,26 +230,17 @@ public final class FrameCompositor: Sendable {
         return blendFilter.outputImage ?? positioned
     }
 
-    /// Creates a white rounded-rect `CIImage` suitable for use as an alpha mask.
+    /// Creates a white "squircle" (continuous-corner) `CIImage` alpha mask.
+    ///
+    /// The editor preview uses SwiftUI's `RoundedRectangle(style: .continuous)`
+    /// which renders iOS-style squircle corners. `CIRoundedRectangleGenerator`
+    /// and the stock `CGPath(roundedRect:cornerWidth:cornerHeight:)` path both
+    /// produce classic 90° circular arcs, so preview and export used to
+    /// disagree at the same radius value. Draw the mask with a custom
+    /// Bezier path instead so both paths converge.
     private func makeRoundedRectMask(rect: CGRect, radius: CGFloat) -> CIImage {
-        // Try the Core Image generator first (available macOS 14+).
-        if let filter = CIFilter(name: "CIRoundedRectangleGenerator") {
-            filter.setValue(CIVector(cgRect: rect), forKey: "inputExtent")
-            filter.setValue(radius, forKey: "inputRadius")
-            filter.setValue(CIColor.white, forKey: "inputColor")
-            if let output = filter.outputImage {
-                return output.cropped(to: rect)
-            }
-        }
-
-        // Fallback: draw into a CGContext and convert.
-        return makeRoundedRectMaskViaCGContext(rect: rect, radius: radius)
-    }
-
-    /// Fallback rounded-rect mask drawn via CGContext.
-    private func makeRoundedRectMaskViaCGContext(rect: CGRect, radius: CGFloat) -> CIImage {
-        let w = Int(rect.width)
-        let h = Int(rect.height)
+        let w = Int(rect.width.rounded())
+        let h = Int(rect.height.rounded())
         guard w > 0, h > 0 else { return CIImage.empty() }
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
@@ -264,16 +255,77 @@ public final class FrameCompositor: Sendable {
         ) else { return CIImage.empty() }
 
         ctx.setFillColor(gray: 1.0, alpha: 1.0)
-        // The path is in the context's local space (origin at bottom-left, same as CIImage).
         let localRect = CGRect(x: 0, y: 0, width: rect.width, height: rect.height)
-        let path = CGPath(roundedRect: localRect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        let path = Self.continuousRoundedRectPath(rect: localRect, cornerRadius: radius)
         ctx.addPath(path)
         ctx.fillPath()
 
         guard let cgImage = ctx.makeImage() else { return CIImage.empty() }
-        // Translate to match the canvas position of the frame.
         let ci = CIImage(cgImage: cgImage)
         return ci.transformed(by: CGAffineTransform(translationX: rect.origin.x, y: rect.origin.y))
+    }
+
+    /// Approximates iOS's `.continuous` corner style (a squircle) using
+    /// cubic Beziers. Each corner eases out ~1.528r before the vertex and
+    /// eases back in ~1.528r after — a widely-cited reconstruction of
+    /// Apple's continuous-corner curve. Falls back to a classic rounded
+    /// rect when the radius is zero or the rect is too small to hold the
+    /// full transition.
+    static func continuousRoundedRectPath(rect: CGRect, cornerRadius: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        let maxR = min(rect.width, rect.height) / 2.0
+        let r = min(max(0, cornerRadius), maxR)
+
+        guard r > 0 else {
+            path.addRect(rect)
+            return path
+        }
+
+        // Transition length along each edge. Clamped so corners from two
+        // adjacent edges can't overlap on very small rects.
+        let t = min(r * 1.528, min(rect.width, rect.height) / 2.0)
+        // Bezier handle length — places control points near the vertex so
+        // the curve tucks in more tightly than a quarter-circle would.
+        let k = r * 0.67
+
+        let minX = rect.minX, maxX = rect.maxX
+        let minY = rect.minY, maxY = rect.maxY
+
+        // Top edge, moving right. Start after the top-left transition.
+        path.move(to: CGPoint(x: minX + t, y: minY))
+        path.addLine(to: CGPoint(x: maxX - t, y: minY))
+        // Top-right corner.
+        path.addCurve(
+            to: CGPoint(x: maxX, y: minY + t),
+            control1: CGPoint(x: maxX - k, y: minY),
+            control2: CGPoint(x: maxX, y: minY + k)
+        )
+        // Right edge.
+        path.addLine(to: CGPoint(x: maxX, y: maxY - t))
+        // Bottom-right corner.
+        path.addCurve(
+            to: CGPoint(x: maxX - t, y: maxY),
+            control1: CGPoint(x: maxX, y: maxY - k),
+            control2: CGPoint(x: maxX - k, y: maxY)
+        )
+        // Bottom edge.
+        path.addLine(to: CGPoint(x: minX + t, y: maxY))
+        // Bottom-left corner.
+        path.addCurve(
+            to: CGPoint(x: minX, y: maxY - t),
+            control1: CGPoint(x: minX + k, y: maxY),
+            control2: CGPoint(x: minX, y: maxY - k)
+        )
+        // Left edge.
+        path.addLine(to: CGPoint(x: minX, y: minY + t))
+        // Top-left corner.
+        path.addCurve(
+            to: CGPoint(x: minX + t, y: minY),
+            control1: CGPoint(x: minX, y: minY + k),
+            control2: CGPoint(x: minX + k, y: minY)
+        )
+        path.closeSubpath()
+        return path
     }
 
     // MARK: - Private: Shadow
