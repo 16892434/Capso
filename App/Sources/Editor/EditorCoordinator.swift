@@ -6,13 +6,6 @@ import EditorKit
 import EffectsKit
 import ExportKit
 import SharedKit
-// `CIImage` isn't annotated as `Sendable` in the SDK yet. Swift 6 strict-
-// concurrency (Xcode 17 CI) rejects passing `cursorCIImage` (a MainActor-
-// isolated computed property) to the nonisolated `CompositorExporter.export`
-// callee. `@preconcurrency` treats the resulting Sendable diagnostic as a
-// warning — CIImage is immutable and thread-safe in practice, so this is
-// the same gradual-migration tool the compiler itself suggests.
-@preconcurrency import CoreImage
 
 @MainActor @Observable
 final class EditorCoordinator {

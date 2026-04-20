@@ -18,7 +18,13 @@ public enum CompositorExporter {
         project: RecordingProject,
         cursorTimeline: SmoothedCursorTimeline?,
         zoomInterpolator: ZoomInterpolator?,
-        cursorImage: CIImage? = nil,
+        // `CIImage` is not `Sendable`-annotated by Apple yet, so callers on
+        // an isolated actor (e.g. `EditorCoordinator` on @MainActor) would
+        // trip Swift 6's "sending risks data races" flow analysis when
+        // handing a CIImage to this nonisolated callee. `sending` marks the
+        // parameter as transferred: the caller must not use the value after
+        // the call. CIImage is immutable in practice, so this is safe.
+        cursorImage: sending CIImage? = nil,
         cursorOverlayProvider: CursorOverlayProvider? = nil,
         destination: URL,
         quality: ExportQuality,
