@@ -1,6 +1,12 @@
 // App/Sources/Recording/RecordingCoordinator.swift
 import AppKit
-import AVFoundation
+// AVFoundation's `AVAssetTrack` and related types aren't annotated as
+// `Sendable` in the SDK yet. Without @preconcurrency, Swift 6 strict-
+// concurrency builds (Xcode 17 CI) fail compiling `openEditor(…)` where
+// `asset.loadTracks(withMediaType:)` returns `[AVAssetTrack]` across an
+// async boundary. Local Debug builds may succeed due to DerivedData
+// caching old artefacts; CI's clean build is authoritative.
+@preconcurrency import AVFoundation
 import Observation
 import HistoryKit
 import RecordingKit
