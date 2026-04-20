@@ -7,6 +7,6 @@ let package = Package(
     dependencies: [.package(path: "../SharedKit"), .package(path: "../EffectsKit"), .package(path: "../EditorKit")],
     targets: [
         .target(name: "ExportKit", dependencies: ["SharedKit", "EffectsKit", "EditorKit"]),
-        .testTarget(name: "ExportKitTests", dependencies: ["ExportKit"]),
+        .testTarget(name: "ExportKitTests", dependencies: ["ExportKit", "SharedKit"]),
     ]
 )

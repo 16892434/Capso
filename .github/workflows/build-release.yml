@@ -108,15 +108,21 @@ jobs:
           set -euo pipefail
           mkdir -p build/archive build/export build/releases
 
+          # Build a universal macOS app. When archive runs on Apple Silicon
+          # without an explicit generic macOS destination, Xcode can emit an
+          # arm64-only binary that Finder rejects on Intel Macs.
           xcodebuild archive \
             -project Capso.xcodeproj \
             -scheme "$SCHEME" \
             -configuration Release \
+            -destination "generic/platform=macOS" \
             -archivePath build/archive/Capso.xcarchive \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             ENABLE_HARDENED_RUNTIME=YES \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             -quiet
 
           APP_PATH="build/archive/Capso.xcarchive/Products/Applications/${APP_NAME}.app"
@@ -125,6 +131,15 @@ jobs:
             find build -name "${APP_NAME}.app" -type d
             exit 1
           fi
+
+          BIN_PATH="$APP_PATH/Contents/MacOS/${APP_NAME}"
+          ARCH_INFO=$(lipo -info "$BIN_PATH")
+          echo "$ARCH_INFO"
+          if [[ "$ARCH_INFO" != *"arm64"* || "$ARCH_INFO" != *"x86_64"* ]]; then
+            echo "ERROR: expected a universal binary with arm64 and x86_64 slices"
+            exit 1
+          fi
+
           cp -R "$APP_PATH" "build/export/${APP_NAME}.app"
 
           # Re-sign Sparkle framework with our Developer ID + hardened

@@ -11,6 +11,7 @@ extension KeyboardShortcuts.Name {
     static let captureScrolling = Self("captureScrolling", default: .init(.six, modifiers: [.option, .shift]))
     static let captureAreaToClipboard = Self("captureAreaToClipboard", default: .init(.seven, modifiers: [.option, .shift]))
     static let captureAreaAndAnnotate = Self("captureAreaAndAnnotate", default: .init(.eight, modifiers: [.option, .shift]))
+    static let screenshotHistory = Self("screenshotHistory", default: .init(.nine, modifiers: [.option, .shift]))
 }
 
 struct ShortcutSettingsView: View {
@@ -51,6 +52,12 @@ struct ShortcutSettingsView: View {
             SettingGroup(title: "Recording") {
                 SettingCard {
                     shortcutRow("Start / Stop Recording", name: .recordScreen)
+                }
+            }
+
+            SettingGroup(title: "Other") {
+                SettingCard {
+                    shortcutRow("Screenshot History", name: .screenshotHistory)
                 }
             }
         }

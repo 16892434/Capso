@@ -41,6 +41,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         registerGlobalShortcuts()
         historyCoordinator?.runCleanup()
+
+        NotificationCenter.default.addObserver(
+            forName: .openScreenshotSettings,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let tabRaw = (notification.object as? PreferencesTab)?.rawValue
+            MainActor.assumeIsolated {
+                let tab = tabRaw.flatMap(PreferencesTab.init(rawValue:)) ?? .screenshots
+                self?.preferencesWindow?.show(tab: tab)
+            }
+        }
         Task {
             await permissionManager.checkScreenRecordingPermission()
             // Request camera permission early so the system dialog
@@ -83,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         KeyboardShortcuts.onKeyDown(for: .captureAreaAndAnnotate) { [weak self] in
             self?.captureCoordinator?.captureAreaAndAnnotate()
+        }
+        KeyboardShortcuts.onKeyDown(for: .screenshotHistory) { [weak self] in
+            self?.historyCoordinator?.showWindow()
         }
     }
 

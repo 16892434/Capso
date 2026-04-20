@@ -243,6 +243,20 @@
         }
       }
     },
+    "Add" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "추가" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加" } }
+      }
+    },
+    "Add Custom Preset" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カスタムプリセットを追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "커스텀 프리셋 추가" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加自定义预设" } }
+      }
+    },
     "After Capture" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -310,6 +324,20 @@
             "value" : "适用于视频和 GIF 导出"
           }
         }
+      }
+    },
+    "ASPECT RATIOS" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アスペクト比" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "화면 비율" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宽高比" } }
+      }
+    },
+    "Aspect Ratio" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "アスペクト比" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "화면 비율" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宽高比" } }
       }
     },
     "Arrow" : {
@@ -565,6 +593,13 @@
         }
       }
     },
+    "Built-in" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "組み込み" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기본 제공" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置" } }
+      }
+    },
     "Camera" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -768,6 +803,13 @@
             "value" : "截取窗口"
           }
         }
+      }
+    },
+    "Capture Presets" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キャプチャプリセット" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "캡처 프리셋" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "截图预设" } }
       }
     },
     "Capture Window Shadow" : {
@@ -1217,6 +1259,13 @@
         }
       }
     },
+    "Constrain area capture to preset aspect ratios or fixed sizes" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "エリアキャプチャをプリセットのアスペクト比や固定サイズに制限する" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "영역 캡처를 사전 설정된 화면 비율 또는 고정 크기로 제한" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将区域截图限制为预设的宽高比或固定尺寸" } }
+      }
+    },
     "Delete from History" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "履歴から削除" } },
@@ -1590,6 +1639,20 @@
         }
       }
     },
+    "FIXED SIZES" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "固定サイズ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "고정 크기" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "固定尺寸" } }
+      }
+    },
+    "Fixed Size" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "固定サイズ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "고정 크기" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "固定尺寸" } }
+      }
+    },
     "Feedback" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1694,6 +1757,20 @@
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "古いキャプチャを自動削除" } },
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "오래된 캡처 자동 삭제" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动删除过期截图" } }
+      }
+    },
+    "Height (px)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "高さ (px)" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "높이 (px)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高度 (px)" } }
+      }
+    },
+    "Height ratio" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "高さの比率" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "높이 비율" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高度比例" } }
       }
     },
     "History" : {
@@ -2080,6 +2157,13 @@
         }
       }
     },
+    "Manage Presets…" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プリセットを管理…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프리셋 관리…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "管理预设…" } }
+      }
+    },
     "Mirror" : {
       "localizations" : {
         "ja" : {
@@ -2100,6 +2184,13 @@
             "value" : "镜像"
           }
         }
+      }
+    },
+    "Name (optional)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "名前（任意）" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이름 (선택 사항)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "名称（可选）" } }
       }
     },
     "None" : {
@@ -2167,6 +2258,13 @@
             "value" : "好"
           }
         }
+      }
+    },
+    "Other" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "その他" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기타" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "其他" } }
       }
     },
     "Padding" : {
@@ -2398,6 +2496,13 @@
         }
       }
     },
+    "Press **R** to cycle presets during area capture" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "**R** キーでエリアキャプチャ中にプリセットを切り替え" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "**R**키로 영역 캡처 중 프리셋 전환" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按 **R** 键在区域截图时切换预设" } }
+      }
+    },
     "Preview Position" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2487,6 +2592,13 @@
             "value" : "退出 Capso"
           }
         }
+      }
+    },
+    "**Right-click** to open the preset picker" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "**右クリック**でプリセット選択を開く" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "**우클릭**으로 프리셋 선택기 열기" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "**右键**打开预设选择器" } }
       }
     },
     "Radial pulse on mouse click" : {
@@ -3126,6 +3238,13 @@
         }
       }
     },
+    "**Shift + R** to cycle in reverse" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "**Shift + R** で逆順に切り替え" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "**Shift + R**로 역방향 전환" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "**Shift + R** 反向切换" } }
+      }
+    },
     "Shortcuts" : {
       "localizations" : {
         "ja" : {
@@ -3670,6 +3789,13 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "今天" } }
       }
     },
+    "Type" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "種類" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유형" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "类型" } }
+      }
+    },
     "Undo" : {
       "localizations" : {
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "元に戻す" } },
@@ -3721,6 +3847,20 @@
             "value" : "视频"
           }
         }
+      }
+    },
+    "Width (px)" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "幅 (px)" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "너비 (px)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宽度 (px)" } }
+      }
+    },
+    "Width ratio" : {
+      "localizations" : {
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "幅の比率" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "너비 비율" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宽度比例" } }
       }
     },
     "Window" : {

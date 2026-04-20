@@ -1,4 +1,5 @@
 // App/Sources/Preferences/PreferencesView.swift
+import Combine
 import SwiftUI
 
 enum PreferencesTab: String, CaseIterable {
@@ -36,9 +37,15 @@ enum PreferencesTab: String, CaseIterable {
 }
 
 struct PreferencesView: View {
-    @State private var selectedTab: PreferencesTab = .general
+    @State private var selectedTab: PreferencesTab
     let viewModel: PreferencesViewModel
     let updateManager: UpdateManager?
+
+    init(viewModel: PreferencesViewModel, updateManager: UpdateManager?, initialTab: PreferencesTab? = nil) {
+        self.viewModel = viewModel
+        self.updateManager = updateManager
+        self._selectedTab = State(initialValue: initialTab ?? .general)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -48,6 +55,13 @@ struct PreferencesView: View {
             content
         }
         .frame(width: 680, height: 480)
+        .onReceive(NotificationCenter.default.publisher(for: .openScreenshotSettings)) { notification in
+            if let tab = notification.object as? PreferencesTab {
+                selectedTab = tab
+            } else {
+                selectedTab = .screenshots
+            }
+        }
     }
 
     private var sidebar: some View {

@@ -14,10 +14,14 @@ final class PreferencesWindow {
         self.updateManager = updateManager
     }
 
-    func show() {
+    func show(tab: PreferencesTab? = nil) {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            // Navigate to requested tab if window already exists
+            if let tab {
+                NotificationCenter.default.post(name: .openScreenshotSettings, object: tab)
+            }
             return
         }
 
@@ -41,7 +45,7 @@ final class PreferencesWindow {
         window.contentView = visualEffect
 
         let viewModel = PreferencesViewModel(settings: settings)
-        let hostingView = NSHostingView(rootView: PreferencesView(viewModel: viewModel, updateManager: updateManager))
+        let hostingView = NSHostingView(rootView: PreferencesView(viewModel: viewModel, updateManager: updateManager, initialTab: tab))
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         visualEffect.addSubview(hostingView)
         NSLayoutConstraint.activate([

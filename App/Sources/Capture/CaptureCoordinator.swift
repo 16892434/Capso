@@ -123,7 +123,7 @@ final class CaptureCoordinator {
     private func showOverlay(mode: CaptureOverlayMode = .area, isScrollingCapture: Bool = false) {
         dismissOverlay()
         for screen in NSScreen.screens {
-            let overlay = CaptureOverlayWindow(screen: screen)
+            let overlay = CaptureOverlayWindow(screen: screen, settings: settings)
             overlay.onAreaSelected = { [weak self] rect, screen in
                 self?.dismissOverlay()
                 if isScrollingCapture {
@@ -193,7 +193,7 @@ final class CaptureCoordinator {
 
         // Step 2: Create transparent overlay windows (top layer) for selection
         for (screen, frozenImage) in frozenScreens {
-            let overlay = CaptureOverlayWindow(screen: screen)
+            let overlay = CaptureOverlayWindow(screen: screen, settings: settings)
             overlay.onAreaSelected = { [weak self] rect, screen in
                 self?.dismissOverlay()
                 let screenFrame = screen.frame

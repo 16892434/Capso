@@ -234,6 +234,64 @@ public final class AppSettings: @unchecked Sendable {
         set { defaults.set(newValue, forKey: "rememberLastCaptureArea") }
     }
 
+    // MARK: Capture Presets
+
+    public var capturePresetsEnabled: Bool {
+        get { defaults.object(forKey: "capturePresetsEnabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "capturePresetsEnabled") }
+    }
+
+    public var capturePreset: CapturePreset {
+        get {
+            guard let data = defaults.data(forKey: "capturePreset"),
+                  let value = try? JSONDecoder().decode(CapturePreset.self, from: data) else {
+                return .freeform
+            }
+            return value
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: "capturePreset")
+            }
+        }
+    }
+
+    public var customCapturePresets: [CapturePreset] {
+        get {
+            guard let data = defaults.data(forKey: "customCapturePresets"),
+                  let value = try? JSONDecoder().decode([CapturePreset].self, from: data) else {
+                return []
+            }
+            return value
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: "customCapturePresets")
+            }
+        }
+    }
+
+    public var hiddenBuiltinPresets: Set<CapturePreset> {
+        get {
+            guard let data = defaults.data(forKey: "hiddenBuiltinPresets"),
+                  let value = try? JSONDecoder().decode(Set<CapturePreset>.self, from: data) else {
+                return []
+            }
+            return value
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: "hiddenBuiltinPresets")
+            }
+        }
+    }
+
+    /// All visible presets in display order: visible built-ins then custom.
+    public var visiblePresets: [CapturePreset] {
+        let builtins = CapturePreset.allBuiltins.filter { !hiddenBuiltinPresets.contains($0) }
+        return builtins + customCapturePresets
+    }
+
     // MARK: History
     public var historyEnabled: Bool {
         get { defaults.object(forKey: "historyEnabled") as? Bool ?? true }

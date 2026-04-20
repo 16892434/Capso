@@ -68,7 +68,9 @@ final class MenuBarController: NSObject {
 
         menu.addItem(.separator())
 
-        menu.addItem(menuItem(String(localized: "Screenshot History..."), action: #selector(openHistory)))
+        let screenshotHistory = menuItem(String(localized: "Screenshot History..."), action: #selector(openHistory))
+        screenshotHistory.setShortcut(for: .screenshotHistory)
+        menu.addItem(screenshotHistory)
         menu.addItem(.separator())
 
         menu.addItem(menuItem(String(localized: "Preferences..."), action: #selector(openPreferences), key: ",", modifiers: [.command]))
@@ -119,6 +121,7 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openAbout() {
+        NSApp.activate()
         NSApp.orderFrontStandardAboutPanel(nil)
     }
 
@@ -140,6 +143,7 @@ extension MenuBarController: NSMenuDelegate {
             case #selector(captureText): item.setShortcut(for: .captureText)
             case #selector(recordScreen): item.setShortcut(for: .recordScreen)
             case #selector(captureScrolling): item.setShortcut(for: .captureScrolling)
+            case #selector(openHistory): item.setShortcut(for: .screenshotHistory)
             default: break
             }
         }

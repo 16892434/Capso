@@ -126,6 +126,52 @@ final class PreferencesViewModel {
         }
     }
 
+    // MARK: Capture Presets
+    var capturePresetsEnabled: Bool {
+        get {
+            access(keyPath: \.capturePresetsEnabled)
+            return settings.capturePresetsEnabled
+        }
+        set {
+            withMutation(keyPath: \.capturePresetsEnabled) {
+                settings.capturePresetsEnabled = newValue
+            }
+        }
+    }
+    var capturePreset: CapturePreset {
+        get {
+            access(keyPath: \.capturePreset)
+            return settings.capturePreset
+        }
+        set {
+            withMutation(keyPath: \.capturePreset) {
+                settings.capturePreset = newValue
+            }
+        }
+    }
+    var customCapturePresets: [CapturePreset] {
+        get {
+            access(keyPath: \.customCapturePresets)
+            return settings.customCapturePresets
+        }
+        set {
+            withMutation(keyPath: \.customCapturePresets) {
+                settings.customCapturePresets = newValue
+            }
+        }
+    }
+    var hiddenBuiltinPresets: Set<CapturePreset> {
+        get {
+            access(keyPath: \.hiddenBuiltinPresets)
+            return settings.hiddenBuiltinPresets
+        }
+        set {
+            withMutation(keyPath: \.hiddenBuiltinPresets) {
+                settings.hiddenBuiltinPresets = newValue
+            }
+        }
+    }
+
     // MARK: Recording
     var recordingFormat: RecordingFormat {
         get {
