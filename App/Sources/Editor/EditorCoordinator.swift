@@ -469,12 +469,17 @@ final class EditorCoordinator {
             )
         }
 
+        // Wrap `cursorCIImage` (MainActor-isolated, non-Sendable CIImage) in
+        // a Sendable box so Swift 6.0's region analysis lets us cross into
+        // the nonisolated `CompositorExporter.export`. See `SendableCIImage`
+        // in ExportKit for why a plain `sending CIImage?` parameter isn't
+        // enough on CI's older toolchain.
         return try await CompositorExporter.export(
             source: project.sourceVideoURL,
             project: project,
             cursorTimeline: cursorTimeline,
             zoomInterpolator: zoomInterpolator,
-            cursorImage: cursorCIImage,
+            cursorImage: SendableCIImage(cursorCIImage),
             cursorOverlayProvider: cursorOverlayProvider,
             destination: destination,
             quality: quality

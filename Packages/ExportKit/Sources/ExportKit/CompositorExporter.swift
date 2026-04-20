@@ -6,6 +6,26 @@ import CoreImage
 import EditorKit
 import SharedKit
 
+/// A wrapper that lets a non-`Sendable` `CIImage` cross isolation boundaries.
+///
+/// `CIImage` is immutable at runtime and thread-safe to read from multiple
+/// actors, but Apple hasn't annotated it as `Sendable`. The `@unchecked
+/// Sendable` escape hatch is the recommended pattern for values that the
+/// SDK will eventually mark `Sendable` but hasn't yet.
+///
+/// Why a wrapper instead of `sending CIImage?` on the parameter: Swift 6.0
+/// (Xcode 16.4, used on CI) does region-based isolation analysis that
+/// refuses to "send" a value whose source is a computed property on an
+/// `@MainActor` class — the backing storage stays in the actor's region.
+/// Wrapping in a `Sendable` type disconnects the region so the value can
+/// cross to a nonisolated callee. Swift 6.3 (Xcode 26) relaxes this and
+/// accepts the bare `sending` parameter, hence the local-passes-CI-fails
+/// divergence we hit.
+public struct SendableCIImage: @unchecked Sendable {
+    public let image: CIImage?
+    public init(_ image: CIImage?) { self.image = image }
+}
+
 /// Exports a recording with visual effects (background, zoom) baked in.
 ///
 /// Uses `AVMutableVideoComposition` with a CIFilter handler for per-frame
@@ -18,18 +38,14 @@ public enum CompositorExporter {
         project: RecordingProject,
         cursorTimeline: SmoothedCursorTimeline?,
         zoomInterpolator: ZoomInterpolator?,
-        // `CIImage` is not `Sendable`-annotated by Apple yet, so callers on
-        // an isolated actor (e.g. `EditorCoordinator` on @MainActor) would
-        // trip Swift 6's "sending risks data races" flow analysis when
-        // handing a CIImage to this nonisolated callee. `sending` marks the
-        // parameter as transferred: the caller must not use the value after
-        // the call. CIImage is immutable in practice, so this is safe.
-        cursorImage: sending CIImage? = nil,
+        cursorImage: SendableCIImage = SendableCIImage(nil),
         cursorOverlayProvider: CursorOverlayProvider? = nil,
         destination: URL,
         quality: ExportQuality,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
+
+        let cursorImage = cursorImage.image
 
         let asset = AVURLAsset(url: source)
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
