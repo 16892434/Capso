@@ -122,7 +122,7 @@ struct EditorSettingsPanel: View {
         .padding(.vertical, 8)
     }
 
-    private func colorPresetButton(_ color: CodableColor, label: String) -> some View {
+    private func colorPresetButton(_ color: CodableColor, label: LocalizedStringKey) -> some View {
         let isSelected = coordinator.project.backgroundStyle.solidColor == color
         return Button {
             coordinator.project.backgroundStyle.solidColor = color
@@ -279,9 +279,9 @@ struct EditorSettingsPanel: View {
     private var autoZoomSubtext: String {
         switch lastAutoZoomRun {
         case .ranEmpty:
-            return "No clear moments detected — try recording with more clicks."
+            return String(localized: "No clear moments detected — try recording with more clicks.")
         case .idle, .ranNonEmpty:
-            return "Analyzes clicks + pauses."
+            return String(localized: "Analyzes clicks + pauses.")
         }
     }
 
@@ -350,7 +350,7 @@ struct EditorSettingsPanel: View {
 
     // MARK: - Reusable Components
 
-    private func sectionLabel(_ title: String) -> some View {
+    private func sectionLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.tertiary)
@@ -375,7 +375,7 @@ struct EditorSettingsPanel: View {
         )
     }
 
-    private func settingToggleRow(_ label: String, isOn: Binding<Bool>) -> some View {
+    private func settingToggleRow(_ label: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         HStack {
             Text(label)
                 .font(.system(size: 13))
@@ -392,7 +392,7 @@ struct EditorSettingsPanel: View {
     /// Vertical layout slider: label + value on top row, full-width slider below.
     /// This gives the slider track maximum width for easy dragging.
     private func verticalSliderRow(
-        _ label: String,
+        _ label: LocalizedStringKey,
         value: Binding<Double>,
         range: ClosedRange<Double>,
         unit: String,
@@ -423,7 +423,7 @@ struct EditorSettingsPanel: View {
     }
 
     private func settingPickerRow<SelectionValue: Hashable, Content: View>(
-        _ label: String,
+        _ label: LocalizedStringKey,
         selection: Binding<SelectionValue>,
         @ViewBuilder content: () -> Content
     ) -> some View {
