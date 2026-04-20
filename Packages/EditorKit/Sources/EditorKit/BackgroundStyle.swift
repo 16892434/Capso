@@ -27,6 +27,25 @@ public struct CodableColor: Codable, Sendable, Equatable {
     public static let white = CodableColor(red: 1.0, green: 1.0, blue: 1.0)
     public static let black = CodableColor(red: 0.0, green: 0.0, blue: 0.0)
     public static let darkGray = CodableColor(red: 0.2, green: 0.2, blue: 0.2)
+
+    // MARK: - Capso Solid Background Palette
+    //
+    // A warm, desaturated, tinted-neutral palette — never pure #000/#fff,
+    // never the AI-slop cyan/purple gradient palette, never full-saturation
+    // rainbow swatches. Values are hand-tuned to:
+    //   • frame recorded video without fighting it for attention
+    //   • read as "warm, restrained, crafted" (see .impeccable.md)
+    //   • stay harmonious with macOS's stock `Color.accentColor` as the
+    //     selection indicator
+    //
+    // Hex comments are informative — canonical source is the RGB triple.
+    public static let ink   = CodableColor(red: 0.102, green: 0.094, blue: 0.078) // #1A1814 — warm deep black
+    public static let stone = CodableColor(red: 0.239, green: 0.216, blue: 0.192) // #3D3731 — warm charcoal
+    public static let mist  = CodableColor(red: 0.910, green: 0.898, blue: 0.875) // #E8E5DF — warm off-white
+    public static let sand  = CodableColor(red: 0.827, green: 0.796, blue: 0.745) // #D3CBBE — cappuccino
+    public static let dusk  = CodableColor(red: 0.290, green: 0.341, blue: 0.459) // #4A5775 — muted indigo
+    public static let sage  = CodableColor(red: 0.608, green: 0.659, blue: 0.569) // #9BA891 — muted green
+    public static let clay  = CodableColor(red: 0.710, green: 0.514, blue: 0.431) // #B5836E — muted terracotta
 }
 
 /// Describes the decorative background rendered behind the video in the editor output.

@@ -109,17 +109,49 @@ struct EditorSettingsPanel: View {
     }
 
     // MARK: - Color Presets
+    //
+    // 2×4 grid: 7 warm-desaturated presets + 1 custom-color cell that hands
+    // off to SwiftUI's native `ColorPicker` (which uses the standard macOS
+    // color panel). Palette and naming follow .impeccable.md — warm
+    // restraint, no pure #000/#fff, no AI-slop gradients.
+
+    /// The 7 presets, in grid order. A single source of truth — used both
+    /// to render the swatches and to detect whether the current solid color
+    /// falls outside the preset set (→ "Custom" cell shows active state).
+    private static let solidColorPresets: [(color: CodableColor, label: LocalizedStringKey)] = [
+        (.ink,   "Ink"),
+        (.stone, "Stone"),
+        (.mist,  "Mist"),
+        (.sand,  "Sand"),
+        (.dusk,  "Dusk"),
+        (.sage,  "Sage"),
+        (.clay,  "Clay"),
+    ]
 
     private var colorPresetRow: some View {
-        HStack(spacing: 8) {
-            colorPresetButton(.darkGray, label: "Dark")
-            colorPresetButton(CodableColor(red: 0.95, green: 0.95, blue: 0.95), label: "Light")
-            colorPresetButton(.black, label: "Black")
-            colorPresetButton(CodableColor(red: 0.15, green: 0.2, blue: 0.35), label: "Navy")
-            colorPresetButton(CodableColor(red: 0.2, green: 0.12, blue: 0.25), label: "Plum")
+        // Column-major-ish: presets fill rows left-to-right; the 8th cell
+        // (bottom-right) is always the custom picker.
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                ForEach(0..<4, id: \.self) { i in
+                    colorPresetButton(
+                        Self.solidColorPresets[i].color,
+                        label: Self.solidColorPresets[i].label
+                    )
+                }
+            }
+            HStack(spacing: 10) {
+                ForEach(4..<7, id: \.self) { i in
+                    colorPresetButton(
+                        Self.solidColorPresets[i].color,
+                        label: Self.solidColorPresets[i].label
+                    )
+                }
+                customColorCell
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
 
     private func colorPresetButton(_ color: CodableColor, label: LocalizedStringKey) -> some View {
@@ -144,6 +176,52 @@ struct EditorSettingsPanel: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// "Custom" cell — a SwiftUI ColorPicker styled to match the preset
+    /// swatches. Clicking opens the native macOS color panel bound to the
+    /// current solid color. Active state (= current color is not one of
+    /// the 7 presets) highlights with the accent color, same as presets.
+    private var customColorCell: some View {
+        let isCustom = !Self.solidColorPresets.contains { $0.color == coordinator.project.backgroundStyle.solidColor }
+
+        let binding = Binding<Color>(
+            get: {
+                let c = coordinator.project.backgroundStyle.solidColor
+                return Color(red: c.red, green: c.green, blue: c.blue)
+            },
+            set: { newColor in
+                // Convert SwiftUI Color → sRGB components via NSColor so the
+                // sliders in the native picker produce the exact RGB we store.
+                let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? .gray
+                coordinator.project.backgroundStyle.solidColor = CodableColor(
+                    red: Double(ns.redComponent),
+                    green: Double(ns.greenComponent),
+                    blue: Double(ns.blueComponent)
+                )
+            }
+        )
+
+        return VStack(spacing: 4) {
+            ColorPicker("", selection: binding, supportsOpacity: false)
+                .labelsHidden()
+                .frame(width: 32, height: 22)
+                .overlay(
+                    // Accent highlight when a custom (non-preset) color is active.
+                    // When a preset is selected, ColorPicker shows that preset's
+                    // color in its swatch — no highlight here (avoids competing
+                    // with the actual preset's selected state).
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(
+                            isCustom ? Color.accentColor : Color.clear,
+                            lineWidth: isCustom ? 2 : 0
+                        )
+                        .allowsHitTesting(false)
+                )
+            Text("Custom")
+                .font(.system(size: 9))
+                .foregroundStyle(isCustom ? .primary : .tertiary)
+        }
     }
 
     // MARK: - Cursor Section
